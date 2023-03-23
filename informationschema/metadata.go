@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xo/usql/drivers"
-	"github.com/xo/usql/drivers/metadata"
-	"github.com/xo/usql/text"
+	"github.com/oarkflow/metadata"
+	"github.com/oarkflow/metadata/text"
 )
 
 // InformationSchema metadata reader

@@ -1,3 +1,3 @@
-module metadata
+module github.com/oarkflow/metadata
 
-go 1.20
+go 1.19

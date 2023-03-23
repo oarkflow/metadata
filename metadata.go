@@ -3,8 +3,8 @@ package metadata
 import (
 	"strings"
 
+	"github.com/oarkflow/metadata/text"
 	"github.com/xo/dburl"
-	"github.com/xo/usql/text"
 )
 
 // ExtendedReader of all database metadata in a structured format.

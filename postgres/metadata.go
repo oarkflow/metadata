@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
-	"github.com/xo/usql/drivers"
-	"github.com/xo/usql/drivers/metadata"
-	infos "github.com/xo/usql/drivers/metadata/informationschema"
+	"github.com/oarkflow/metadata"
+	"github.com/oarkflow/metadata/drivers"
+	infos "github.com/oarkflow/metadata/informationschema"
 )
 
 type metaReader struct {
@@ -17,12 +17,14 @@ type metaReader struct {
 	limit int
 }
 
-var _ metadata.CatalogReader = &metaReader{}
-var _ metadata.TableReader = &metaReader{}
-var _ metadata.ColumnStatReader = &metaReader{}
-var _ metadata.IndexReader = &metaReader{}
-var _ metadata.IndexColumnReader = &metaReader{}
-var _ metadata.TriggerReader = &metaReader{}
+var (
+	_ metadata.CatalogReader     = &metaReader{}
+	_ metadata.TableReader       = &metaReader{}
+	_ metadata.ColumnStatReader  = &metaReader{}
+	_ metadata.IndexReader       = &metaReader{}
+	_ metadata.IndexColumnReader = &metaReader{}
+	_ metadata.TriggerReader     = &metaReader{}
+)
 
 func NewReader() func(drivers.DB, ...metadata.ReaderOption) metadata.Reader {
 	return func(db drivers.DB, opts ...metadata.ReaderOption) metadata.Reader {
@@ -94,9 +96,7 @@ func (s Catalog) GetCatalog() metadata.Catalog {
 	return s.Catalog
 }
 
-var (
-	catalogsColumnName = []string{"Catalog", "Owner", "Encoding", "Collate", "Ctype", "Access privileges"}
-)
+var catalogsColumnName = []string{"Catalog", "Owner", "Encoding", "Collate", "Ctype", "Access privileges"}
 
 func (r metaReader) Catalogs(metadata.Filter) (*metadata.CatalogSet, error) {
 	qstr := `SELECT d.datname as "Name",

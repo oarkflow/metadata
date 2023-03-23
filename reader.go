@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/xo/usql/text"
+	"github.com/oarkflow/metadata/text"
 )
 
 // PluginReader allows to be easily composed from other readers

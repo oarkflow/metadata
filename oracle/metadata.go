@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xo/usql/drivers"
-	"github.com/xo/usql/drivers/metadata"
+	"github.com/oarkflow/metadata"
+	"github.com/oarkflow/metadata/drivers"
 )
 
 type metaReader struct {
@@ -15,9 +15,11 @@ type metaReader struct {
 	systemSchemas string
 }
 
-var _ metadata.BasicReader = &metaReader{}
-var _ metadata.IndexReader = &metaReader{}
-var _ metadata.IndexColumnReader = &metaReader{}
+var (
+	_ metadata.BasicReader       = &metaReader{}
+	_ metadata.IndexReader       = &metaReader{}
+	_ metadata.IndexColumnReader = &metaReader{}
+)
 
 func NewReader() func(drivers.DB, ...metadata.ReaderOption) metadata.Reader {
 	return func(db drivers.DB, opts ...metadata.ReaderOption) metadata.Reader {

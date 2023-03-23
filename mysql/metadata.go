@@ -4,10 +4,11 @@ import (
 	"time"
 
 	"github.com/gohxs/readline"
-	"github.com/xo/usql/drivers"
-	"github.com/xo/usql/drivers/completer"
-	"github.com/xo/usql/drivers/metadata"
-	infos "github.com/xo/usql/drivers/metadata/informationschema"
+
+	"github.com/oarkflow/metadata"
+	"github.com/oarkflow/metadata/completer"
+	"github.com/oarkflow/metadata/drivers"
+	infos "github.com/oarkflow/metadata/informationschema"
 )
 
 var (
