@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/oarkflow/db"
 )
@@ -28,16 +29,17 @@ type Source struct {
 
 type Field struct {
 	Name       string `json:"name" gorm:"column:name"`
+	Key        string `json:"key" gorm:"column:key"`
 	IsNullable string `json:"is_nullable" gorm:"column:is_nullable"`
 	DataType   string `json:"data_type" gorm:"column:data_type"`
 	Precision  int    `json:"precision" gorm:"column:precision"`
-	Scale      int    `json:"scale" gorm:"column:scale"`
-	Key        string `json:"key" gorm:"column:key"`
 	Comment    string `json:"comment" gorm:"column:comment"`
 	Default    string `json:"default" gorm:"column:default"`
 	Length     int    `json:"length" gorm:"column:length"`
 	Extra      string `json:"extra" gorm:"column:extra"`
 }
+
+var space = regexp.MustCompile(`\s+`)
 
 type ForeignKey struct {
 	Name             string `json:"name" gorm:"column:name"`
@@ -68,6 +70,8 @@ type DataSource interface {
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
+	GenerateSQL(table string, existingFields, newFields []Field) (string, error)
+	Migrate(table string, dst DataSource) error
 	GetType() string
 }
 

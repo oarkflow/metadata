@@ -108,6 +108,14 @@ func (h *Http) GetSingle(table string) (map[string]any, error) {
 	return nil, nil
 }
 
+func (h *Http) GenerateSQL(table string, existingFields, newFields []Field) (string, error) {
+	return "", nil
+}
+
+func (h *Http) Migrate(table string, dst DataSource) error {
+	return nil
+}
+
 func NewHttp(config *http.Options, payload protocol.Payload) *Http {
 	if config.ResponseCallback == nil {
 		config.ResponseCallback = defaultResponseCallback
