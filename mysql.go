@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	json "github.com/bytedance/sonic"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -58,7 +59,16 @@ func (p *MySQL) GetSources() (tables []Source, err error) {
 }
 
 func (p *MySQL) GetFields(table string) (fields []Field, err error) {
-	err = p.client.Raw("SELECT column_name as `name`, column_default as `default`, is_nullable as `is_nullable`, data_type as data_type, CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as `length`, numeric_scale as `precision`, column_comment as `comment`, column_key as `key`, extra as extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME =  ? AND TABLE_SCHEMA = ?;", table, p.schema).Scan(&fields).Error
+	var fieldMaps []map[string]any
+	err = p.client.Raw("SELECT column_name as `name`, column_default as `default`, is_nullable as `is_nullable`, data_type as type, CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as `length`, numeric_scale as `precision`, column_comment as `comment`, column_key as `key`, extra as extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME =  ? AND TABLE_SCHEMA = ?;", table, p.schema).Scan(&fieldMaps).Error
+	if err != nil {
+		return
+	}
+	bt, err := json.Marshal(fieldMaps)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(bt, &fields)
 	return
 }
 
@@ -199,8 +209,10 @@ func (p *MySQL) FieldAsString(f Field, driver, action string) string {
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
-			defaultVal = "DEFAULT " + f.Default
+		if f.Default != nil {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		} else {
+			defaultVal = "DEFAULT NULL"
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -230,8 +242,10 @@ func (p *MySQL) FieldAsString(f Field, driver, action string) string {
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
-			defaultVal = "DEFAULT " + f.Default
+		if f.Default != nil {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		} else {
+			defaultVal = "DEFAULT NULL"
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -258,12 +272,14 @@ func (p *MySQL) FieldAsString(f Field, driver, action string) string {
 		comment := ""
 		primaryKey := ""
 		autoIncrement := ""
-		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s"
+		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
-			defaultVal = "DEFAULT " + f.Default
+		if f.Default != nil {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		} else {
+			defaultVal = "DEFAULT NULL"
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -288,8 +304,10 @@ func (p *MySQL) FieldAsString(f Field, driver, action string) string {
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
-			defaultVal = "DEFAULT " + f.Default
+		if f.Default != nil {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		} else {
+			defaultVal = "DEFAULT NULL"
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment

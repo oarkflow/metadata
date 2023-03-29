@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	json "github.com/bytedance/sonic"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -57,7 +58,16 @@ func (p *Postgres) GetSources() (tables []Source, err error) {
 }
 
 func (p *Postgres) GetFields(table string) (fields []Field, err error) {
-	err = p.client.Raw(`SELECT c.column_name as "name", column_default as "default", is_nullable as "is_nullable", data_type as "data_type", CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as "length", numeric_scale as "precision",a.column_key as "key", '' as extra  FROM INFORMATION_SCHEMA.COLUMNS c  LEFT JOIN (  select kcu.table_name,        'PRI' as column_key,        kcu.ordinal_position as position,        kcu.column_name as column_name from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name where tco.constraint_type = 'PRIMARY KEY' and kcu.table_catalog = ? AND kcu.table_schema = 'public' AND kcu.table_name = ? order by kcu.table_schema,          kcu.table_name,          position          ) a ON c.table_name = a.table_name AND a.column_name = c.column_name          WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name = ?;`, p.schema, table, p.schema, table).Scan(&fields).Error
+	var fieldMaps []map[string]any
+	err = p.client.Raw(`SELECT c.column_name as "name", column_default as "default", is_nullable as "is_nullable", data_type as "type", CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as "length", numeric_scale as "precision",a.column_key as "key", '' as extra  FROM INFORMATION_SCHEMA.COLUMNS c  LEFT JOIN (  select kcu.table_name,        'PRI' as column_key,        kcu.ordinal_position as position,        kcu.column_name as column_name from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name where tco.constraint_type = 'PRIMARY KEY' and kcu.table_catalog = ? AND kcu.table_schema = 'public' AND kcu.table_name = ? order by kcu.table_schema,          kcu.table_name,          position          ) a ON c.table_name = a.table_name AND a.column_name = c.column_name          WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name = ?;`, p.schema, table, p.schema, table).Scan(&fieldMaps).Error
+	if err != nil {
+		return
+	}
+	bt, err := json.Marshal(fieldMaps)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(bt, &fields)
 	return
 }
 
@@ -200,7 +210,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
+		if f.Default != nil {
 			if v, ok := dataTypes[f.DataType]; ok {
 				if v == "BOOLEAN" {
 					if f.Default == "0" {
@@ -210,7 +220,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 					}
 				}
 			}
-			defaultVal = "DEFAULT " + f.Default
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -234,7 +244,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
+		if f.Default != nil {
 			if v, ok := dataTypes[f.DataType]; ok {
 				if v == "BOOLEAN" {
 					if f.Default == "0" {
@@ -244,7 +254,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 					}
 				}
 			}
-			defaultVal = "DEFAULT " + f.Default
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -271,11 +281,11 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 		comment := ""
 		primaryKey := ""
 		autoIncrement := ""
-		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s"
+		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
 		if strings.ToUpper(f.IsNullable) == "NO" {
 			nullable = "NOT NULL"
 		}
-		if f.Default != "" {
+		if f.Default != nil {
 			if v, ok := dataTypes[f.DataType]; ok {
 				if v == "BOOLEAN" {
 					if f.Default == "0" {
@@ -285,7 +295,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 					}
 				}
 			}
-			defaultVal = "DEFAULT " + f.Default
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment
@@ -320,7 +330,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 					}
 				}
 			}
-			defaultVal = "DEFAULT " + f.Default
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
 		}
 		if f.Comment != "" {
 			comment = "COMMENT " + f.Comment

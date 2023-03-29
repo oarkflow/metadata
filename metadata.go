@@ -1,11 +1,37 @@
 package metadata
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"regexp"
 
 	"github.com/oarkflow/db"
+	"github.com/oarkflow/errors"
 )
+
+type Any json.RawMessage
+
+// Scan scan value into Jsonb, implements sql.Scanner interface
+func (j *Any) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
+	}
+
+	result := json.RawMessage{}
+	err := json.Unmarshal(bytes, &result)
+	*j = Any(result)
+	return err
+}
+
+// Value return json value, implement driver.Valuer interface
+func (j Any) Value() (driver.Value, error) {
+	if len(j) == 0 {
+		return nil, nil
+	}
+	return json.RawMessage(j).MarshalJSON()
+}
 
 type Config struct {
 	Name     string `json:"name"`
@@ -31,10 +57,10 @@ type Field struct {
 	Name       string `json:"name" gorm:"column:name"`
 	Key        string `json:"key" gorm:"column:key"`
 	IsNullable string `json:"is_nullable" gorm:"column:is_nullable"`
-	DataType   string `json:"data_type" gorm:"column:data_type"`
+	DataType   string `json:"type" gorm:"column:type"`
 	Precision  int    `json:"precision" gorm:"column:precision"`
 	Comment    string `json:"comment" gorm:"column:comment"`
-	Default    string `json:"default" gorm:"column:default"`
+	Default    any    `json:"default" gorm:"column:default"`
 	Length     int    `json:"length" gorm:"column:length"`
 	Extra      string `json:"extra" gorm:"column:extra"`
 }
