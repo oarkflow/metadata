@@ -27,9 +27,9 @@ var postgresQueries = map[string]string{
 
 var postgresDataTypes = map[string]string{
 	"int":       "INT",
-	"float":     "FLOAT",
-	"double":    "DOUBLE",
-	"decimal":   "DECIMAL",
+	"float":     "NUMERIC",
+	"double":    "NUMERIC",
+	"decimal":   "NUMERIC",
 	"tinyint":   "BOOLEAN",
 	"string":    "VARCHAR",
 	"varchar":   "VARCHAR",
