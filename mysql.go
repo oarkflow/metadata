@@ -129,6 +129,72 @@ func (p *MySQL) GetType() string {
 	return "mysql"
 }
 
+func getMySQLFieldAlterDataType(table string, f Field) string {
+	dataTypes := mysqlDataTypes
+	defaultVal := ""
+	if f.Default != nil {
+		if v, ok := dataTypes[f.DataType]; ok {
+			switch v1 := f.Default.(type) {
+			case bool:
+				if v1 {
+					f.Default = 1
+				} else {
+					f.Default = 0
+				}
+			}
+			if v == "BOOLEAN" {
+				def := fmt.Sprintf("%v", f.Default)
+				if strings.ToUpper(def) == "FALSE" || strings.ToUpper(def) == "NO" {
+					f.Default = "0"
+				} else if strings.ToUpper(def) == "TRUE" || strings.ToUpper(def) == "YES" {
+					f.Default = "1"
+				}
+			}
+		}
+		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+	}
+	f.Comment = "COMMENT '" + f.Comment + "'"
+	nullable := "NULL"
+	if strings.ToUpper(f.IsNullable) == "NO" {
+		nullable = "NOT NULL"
+	}
+	switch f.DataType {
+	case "float", "double", "decimal", "numeric", "int", "integer":
+		if f.Length == 0 {
+			f.Length = 11
+		}
+		if f.Precision == 0 {
+			f.Precision = 2
+		}
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+		}
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+	case "string", "varchar", "text", "character varying":
+		if f.Length == 0 {
+			f.Length = 255
+		}
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+		}
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+	default:
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], nullable, defaultVal, f.Comment)
+		}
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal, f.Comment)
+	}
+}
+
+func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
+	newSQL := getMySQLFieldAlterDataType(table, f)
+	existingSQL := getMySQLFieldAlterDataType(table, existingField)
+	if newSQL != existingSQL {
+		return newSQL
+	}
+	return ""
+}
+
 func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
 	var sql string
 	var query []string
@@ -143,36 +209,52 @@ func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
 }
 
 func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
-	var query []string
-	var sql string
+	var sql []string
 	existingFields, err := p.GetFields(table)
 	if err != nil {
 		return "", err
 	}
 	for _, newField := range newFields {
-		var fieldExists bool
-		for _, existingField := range existingFields {
-			if newField.Name == existingField.Name {
-				existingSql := p.FieldAsString(existingField, "change_column")
-				newSql := p.FieldAsString(newField, "change_column")
-				if newSql != existingSql {
-					query = append(query, newSql)
+		if newField.IsNullable == "" {
+			newField.IsNullable = "YES"
+		}
+		if newField.OldName == "" {
+			for _, existingField := range existingFields {
+				if existingField.Name == newField.Name {
+					if mysqlDataTypes[existingField.DataType] != mysqlDataTypes[newField.DataType] ||
+						existingField.Length != newField.Length ||
+						existingField.Default != newField.Default ||
+						existingField.Comment != newField.Comment ||
+						existingField.IsNullable != newField.IsNullable {
+						qry := p.alterFieldSQL(table, newField, existingField)
+						if qry != "" {
+							sql = append(sql, qry)
+						}
+					}
 				}
-				fieldExists = true
-				break
 			}
 		}
-		if !fieldExists {
-			query = append(query, p.FieldAsString(newField, "add_column"))
-		} else {
-			query = append(query, p.FieldAsString(newField, "change_column"))
+	}
+	for _, newField := range newFields {
+		if newField.IsNullable == "" {
+			newField.IsNullable = "YES"
+		}
+		if newField.OldName != "" {
+			for _, existingField := range existingFields {
+				if existingField.Name == newField.Name {
+					qry := p.alterFieldSQL(table, newField, existingField)
+					if qry != "" {
+						sql = append(sql, qry)
+					}
+				}
+			}
 		}
 	}
-	if len(query) > 0 {
-		fieldsToUpdate := strings.Join(query, ", ")
-		sql = fmt.Sprintf(mysqlQueries["alter_table"], table) + " " + fieldsToUpdate
+
+	if len(sql) > 0 {
+		return strings.Join(sql, ""), nil
 	}
-	return sql, nil
+	return "", nil
 }
 
 func (p *MySQL) GenerateSQL(table string, newFields []Field) (string, error) {
@@ -209,36 +291,37 @@ func (p *MySQL) Migrate(table string, dst DataSource) error {
 func (p *MySQL) FieldAsString(f Field, action string) string {
 	sqlPattern := mysqlQueries
 	dataTypes := mysqlDataTypes
+
+	nullable := "NULL"
+	defaultVal := ""
+	comment := ""
+	primaryKey := ""
+	autoIncrement := ""
+	if strings.ToUpper(f.IsNullable) == "NO" {
+		nullable = "NOT NULL"
+	}
+	if f.Default != nil {
+		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+	} else {
+		defaultVal = "DEFAULT NULL"
+	}
+	if f.Comment != "" {
+		comment = "COMMENT '" + f.Comment + "'"
+	}
+	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
+		primaryKey = "PRIMARY KEY"
+	}
+	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
+		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
+			autoIncrement = "AUTO_INCREMENT"
+		}
+	}
 	switch f.DataType {
 	case "string", "varchar", "text":
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		} else {
-			defaultVal = "DEFAULT NULL"
-		}
-		if f.Comment != "" {
-			comment = "COMMENT '" + f.Comment + "'"
-		}
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				autoIncrement = "AUTO_INCREMENT"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "int", "integer", "big_integer", "bigInteger", "tinyint":
 		if f.Length == 0 {
@@ -247,32 +330,7 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		if f.DataType == "tinyint" {
 			f.Length = 1
 		}
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		} else {
-			defaultVal = "DEFAULT NULL"
-		}
-		if f.Comment != "" {
-			comment = "COMMENT " + f.Comment
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				autoIncrement = "AUTO_INCREMENT"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal":
 		if f.Length == 0 {
@@ -281,60 +339,10 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		} else {
-			defaultVal = "DEFAULT NULL"
-		}
-		if f.Comment != "" {
-			comment = "COMMENT " + f.Comment
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				autoIncrement = "AUTO_INCREMENT"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		} else {
-			defaultVal = "DEFAULT NULL"
-		}
-		if f.Comment != "" {
-			comment = "COMMENT " + f.Comment
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				autoIncrement = "AUTO_INCREMENT"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
 }

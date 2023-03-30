@@ -29,7 +29,7 @@ var data = []byte(`
 		"name": "full_description",
 		"title": "Long Description",
 		"type": "string",
-		"old_name": "l"
+		"old_name": "ld"
 	},
 	{
 		"name": "fd",
@@ -40,13 +40,13 @@ var data = []byte(`
 		"name": "nfrvu",
 		"title": "nfrvu",
 		"type": "double",
-		"default": 0.00
+		"default": 0
 	},
 	{
 		"name": "facrvu",
 		"title": "facrvu",
 		"type": "double",
-		"default": 0.00
+		"default": 0
 	},
 	{
 		"name": "status",
