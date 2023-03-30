@@ -11,7 +11,8 @@ var data = []byte(`
 [
 	{
 		"name": "cpt_code",
-		"title": "Code",
+		"title": "CPT Code",
+		"key": "pri",
 		"type": "string",
 		"length": 100,
 		"nullable": false,
@@ -50,7 +51,7 @@ var data = []byte(`
 		"name": "status",
 		"title": "Status",
 		"type": "string",
-		"default": "null"
+		"default": null
 	}
 ]
 `)
@@ -63,11 +64,11 @@ func main() {
 	}
 	cfg := metadata.Config{
 		Host:     "localhost",
-		Port:     3306,
-		Driver:   "mysql",
-		Username: "root",
-		Password: "root",
-		Database: "cleardb",
+		Port:     5432,
+		Driver:   "postgresql",
+		Username: "postgres",
+		Password: "postgres",
+		Database: "sujit",
 	}
 	source := metadata.New(cfg)
 	src, err := source.Connect()
@@ -78,6 +79,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(existingFields)
 	fmt.Println(src.GenerateSQL("lu_cpt", existingFields, fields))
 }

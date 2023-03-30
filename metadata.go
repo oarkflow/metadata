@@ -92,6 +92,7 @@ type DataSource interface {
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
 	GetCollection(table string) ([]map[string]any, error)
+	Exec(sql string, values ...any) error
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse

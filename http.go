@@ -69,6 +69,10 @@ func (h *Http) GetCollection(table string) ([]map[string]any, error) {
 	return nil, nil
 }
 
+func (p *Http) Exec(sql string, values ...any) error {
+	return nil
+}
+
 func (h *Http) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
 	// TODO implement me
 	panic("implement me")

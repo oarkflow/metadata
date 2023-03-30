@@ -20,25 +20,27 @@ var postgresQueries = map[string]string{
 	"create_table":  "CREATE TABLE IF NOT EXISTS %s",
 	"alter_table":   "ALTER TABLE %s",
 	"column":        "%s %s",
-	"add_column":    "ADD COLUMN %s %s",   // {{length}} NOT NULL DEFAULT 1
-	"change_column": "ALTER COLUMN %s %s", // {{length}} NOT NULL DEFAULT 1
-	"remove_column": "ALTER COLUMN % %s",  // {{length}} NOT NULL DEFAULT 1
+	"add_column":    "ADD COLUMN %s %s",        // {{length}} NOT NULL DEFAULT 1
+	"change_column": "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
+	"remove_column": "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
 }
 
 var postgresDataTypes = map[string]string{
-	"int":       "INT",
-	"float":     "NUMERIC",
-	"double":    "NUMERIC",
-	"decimal":   "NUMERIC",
-	"tinyint":   "BOOLEAN",
-	"string":    "VARCHAR",
-	"varchar":   "VARCHAR",
-	"text":      "TEXT",
-	"serial":    "SERIAL",
-	"datetime":  "TIMESTAMP",
-	"date":      "DATE",
-	"time":      "TIME",
-	"timestamp": "TIMESTAMP",
+	"int":               "INT",
+	"float":             "NUMERIC",
+	"numeric":           "NUMERIC",
+	"double":            "NUMERIC",
+	"decimal":           "NUMERIC",
+	"tinyint":           "BOOLEAN",
+	"string":            "VARCHAR",
+	"varchar":           "VARCHAR",
+	"character varying": "VARCHAR",
+	"text":              "TEXT",
+	"serial":            "SERIAL",
+	"datetime":          "TIMESTAMP",
+	"date":              "DATE",
+	"time":              "TIME",
+	"timestamp":         "TIMESTAMP",
 }
 
 func (p *Postgres) Connect() (DataSource, error) {
@@ -53,7 +55,7 @@ func (p *Postgres) Connect() (DataSource, error) {
 }
 
 func (p *Postgres) GetSources() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name").Where("table_schema = ?", p.schema).Find(&tables).Error
+	err = p.client.Table("information_schema.tables").Select("table_name as name").Where("table_catalog = ? AND table_schema = 'public'", p.schema).Find(&tables).Error
 	return
 }
 
@@ -88,6 +90,11 @@ func (p *Postgres) GetCollection(table string) ([]map[string]any, error) {
 	}
 	return rows, nil
 }
+
+func (p *Postgres) Exec(sql string, values ...any) error {
+	return p.client.Exec(sql, values...).Error
+}
+
 func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
 	var rows []map[string]any
 	if len(params) > 0 {
@@ -143,8 +150,11 @@ func (p *Postgres) GenerateSQL(table string, existingFields, newFields []Field) 
 		var fieldExists bool
 		for _, existingField := range existingFields {
 			if newField.Name == existingField.Name {
-				existingSql := p.FieldAsString(existingField, "postgres", "change_column")
-				newSql := p.FieldAsString(newField, "postgres", "change_column")
+				fmt.Println(existingField.DataType)
+				existingSql := p.FieldAsString(existingField, "change_column")
+				newSql := p.FieldAsString(newField, "change_column")
+				fmt.Println(existingSql)
+				fmt.Println(newSql)
 				if newSql != existingSql {
 					query = append(query, newSql)
 				}
@@ -154,9 +164,9 @@ func (p *Postgres) GenerateSQL(table string, existingFields, newFields []Field) 
 		}
 		if !fieldExists {
 			if sourceExists {
-				query = append(query, p.FieldAsString(newField, "postgres", "add_column"))
+				query = append(query, p.FieldAsString(newField, "add_column"))
 			} else {
-				query = append(query, p.FieldAsString(newField, "postgres", "column"))
+				query = append(query, p.FieldAsString(newField, "column"))
 			}
 		}
 	}
@@ -184,20 +194,11 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
-func (p *Postgres) FieldAsString(f Field, driver, action string) string {
-
-	var dataTypes map[string]string
-	var sqlPattern map[string]string
-	switch driver {
-	case "mysql":
-		sqlPattern = mysqlQueries
-		dataTypes = mysqlDataTypes
-	case "postgres":
-		sqlPattern = postgresQueries
-		dataTypes = postgresDataTypes
-	}
+func (p *Postgres) FieldAsString(f Field, action string) string {
+	sqlPattern := postgresQueries
+	dataTypes := postgresDataTypes
 	switch f.DataType {
-	case "string", "varchar", "text":
+	case "string", "varchar", "text", "character varying":
 		if f.Length == 0 {
 			f.Length = 255
 		}
@@ -269,7 +270,7 @@ func (p *Postgres) FieldAsString(f Field, driver, action string) string {
 			}
 		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
-	case "float", "double", "decimal":
+	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 11
 		}

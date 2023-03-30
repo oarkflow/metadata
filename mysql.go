@@ -89,6 +89,11 @@ func (p *MySQL) GetCollection(table string) ([]map[string]any, error) {
 	}
 	return rows, nil
 }
+
+func (p *MySQL) Exec(sql string, values ...any) error {
+	return p.client.Exec(sql, values...).Error
+}
+
 func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
 	var rows []map[string]any
 	if len(params) > 0 {
@@ -142,8 +147,8 @@ func (p *MySQL) GenerateSQL(table string, existingFields, newFields []Field) (st
 		var fieldExists bool
 		for _, existingField := range existingFields {
 			if newField.Name == existingField.Name {
-				existingSql := p.FieldAsString(existingField, "mysql", "change_column")
-				newSql := p.FieldAsString(newField, "mysql", "change_column")
+				existingSql := p.FieldAsString(existingField, "change_column")
+				newSql := p.FieldAsString(newField, "change_column")
 				if newSql != existingSql {
 					query = append(query, newSql)
 				}
@@ -153,9 +158,9 @@ func (p *MySQL) GenerateSQL(table string, existingFields, newFields []Field) (st
 		}
 		if !fieldExists {
 			if sourceExists {
-				query = append(query, p.FieldAsString(newField, "mysql", "add_column"))
+				query = append(query, p.FieldAsString(newField, "add_column"))
 			} else {
-				query = append(query, p.FieldAsString(newField, "mysql", "column"))
+				query = append(query, p.FieldAsString(newField, "column"))
 			}
 		}
 	}
@@ -183,18 +188,9 @@ func (p *MySQL) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
-func (p *MySQL) FieldAsString(f Field, driver, action string) string {
-
-	var dataTypes map[string]string
-	var sqlPattern map[string]string
-	switch driver {
-	case "mysql":
-		sqlPattern = mysqlQueries
-		dataTypes = mysqlDataTypes
-	case "postgres":
-		sqlPattern = postgresQueries
-		dataTypes = postgresDataTypes
-	}
+func (p *MySQL) FieldAsString(f Field, action string) string {
+	sqlPattern := mysqlQueries
+	dataTypes := mysqlDataTypes
 	switch f.DataType {
 	case "string", "varchar", "text":
 		if f.Length == 0 {
