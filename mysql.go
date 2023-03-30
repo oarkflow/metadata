@@ -129,19 +129,25 @@ func (p *MySQL) GetType() string {
 	return "mysql"
 }
 
-func (p *MySQL) GenerateSQL(table string, existingFields, newFields []Field) (string, error) {
+func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
 	var sql string
 	var query []string
-	sources, err := p.GetSources()
+	for _, newField := range newFields {
+		query = append(query, p.FieldAsString(newField, "column"))
+	}
+	if len(query) > 0 {
+		fieldsToUpdate := strings.Join(query, ", ")
+		sql = fmt.Sprintf(mysqlQueries["create_table"], table) + " (" + fieldsToUpdate + ")"
+	}
+	return sql, nil
+}
+
+func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
+	var query []string
+	var sql string
+	existingFields, err := p.GetFields(table)
 	if err != nil {
 		return "", err
-	}
-	sourceExists := false
-	for _, source := range sources {
-		if source.Name == table {
-			sourceExists = true
-			break
-		}
 	}
 	for _, newField := range newFields {
 		var fieldExists bool
@@ -157,22 +163,34 @@ func (p *MySQL) GenerateSQL(table string, existingFields, newFields []Field) (st
 			}
 		}
 		if !fieldExists {
-			if sourceExists {
-				query = append(query, p.FieldAsString(newField, "add_column"))
-			} else {
-				query = append(query, p.FieldAsString(newField, "column"))
-			}
+			query = append(query, p.FieldAsString(newField, "add_column"))
+		} else {
+			query = append(query, p.FieldAsString(newField, "change_column"))
 		}
 	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
-		if sourceExists {
-			sql = fmt.Sprintf(mysqlQueries["alter_table"], table) + " " + fieldsToUpdate
-		} else {
-			sql = fmt.Sprintf(mysqlQueries["create_table"], table) + " (" + fieldsToUpdate + ")"
-		}
+		sql = fmt.Sprintf(mysqlQueries["alter_table"], table) + " " + fieldsToUpdate
 	}
 	return sql, nil
+}
+
+func (p *MySQL) GenerateSQL(table string, newFields []Field) (string, error) {
+	sources, err := p.GetSources()
+	if err != nil {
+		return "", err
+	}
+	sourceExists := false
+	for _, source := range sources {
+		if source.Name == table {
+			sourceExists = true
+			break
+		}
+	}
+	if !sourceExists {
+		return p.createSQL(table, newFields)
+	}
+	return p.alterSQL(table, newFields)
 }
 
 func (p *MySQL) Migrate(table string, dst DataSource) error {
@@ -180,7 +198,7 @@ func (p *MySQL) Migrate(table string, dst DataSource) error {
 	if err != nil {
 		return err
 	}
-	sql, err := dst.GenerateSQL(table, nil, fields)
+	sql, err := dst.GenerateSQL(table, fields)
 	if err != nil {
 		return err
 	}
@@ -211,7 +229,7 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 			defaultVal = "DEFAULT NULL"
 		}
 		if f.Comment != "" {
-			comment = "COMMENT " + f.Comment
+			comment = "COMMENT '" + f.Comment + "'"
 		}
 		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
 			primaryKey = "PRIMARY KEY"

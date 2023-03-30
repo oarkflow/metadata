@@ -15,10 +15,10 @@ var data = []byte(`
 		"key": "pri",
 		"type": "string",
 		"length": 100,
-		"nullable": false,
+		"is_nullable": "NO",
 		"required": true,
 		"default": true,
-		"description": "CPT Code"
+		"comment": "CPT Code"
 	},
 	{
 		"name": "sd",
@@ -26,9 +26,10 @@ var data = []byte(`
 		"type": "string"
 	},
 	{
-		"name": "ld",
+		"name": "full_description",
 		"title": "Long Description",
-		"type": "string"
+		"type": "string",
+		"old_name": "l"
 	},
 	{
 		"name": "fd",
@@ -64,20 +65,21 @@ func main() {
 	}
 	cfg := metadata.Config{
 		Host:     "localhost",
-		Port:     5432,
-		Driver:   "postgresql",
-		Username: "postgres",
-		Password: "postgres",
-		Database: "sujit",
+		Port:     3306,
+		Driver:   "mysql",
+		Username: "root",
+		Password: "root",
+		Database: "itbeema",
 	}
 	source := metadata.New(cfg)
 	src, err := source.Connect()
 	if err != nil {
 		panic(err)
 	}
-	existingFields, err := src.GetFields("lu_cpt")
+	queryToExecute, err := src.GenerateSQL("lu_cpt", fields)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(src.GenerateSQL("lu_cpt", existingFields, fields))
+	fmt.Println(queryToExecute)
+	// fmt.Println(src.Exec(queryToExecute))
 }

@@ -55,6 +55,7 @@ type Source struct {
 
 type Field struct {
 	Name       string `json:"name" gorm:"column:name"`
+	OldName    string `json:"old_name" gorm:"column:old_name"`
 	Key        string `json:"key" gorm:"column:key"`
 	IsNullable string `json:"is_nullable" gorm:"column:is_nullable"`
 	DataType   string `json:"type" gorm:"column:type"`
@@ -97,7 +98,7 @@ type DataSource interface {
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
-	GenerateSQL(table string, existingFields, newFields []Field) (string, error)
+	GenerateSQL(table string, newFields []Field) (string, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
 }
