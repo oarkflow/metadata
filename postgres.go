@@ -308,74 +308,44 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 func (p *Postgres) FieldAsString(f Field, action string) string {
 	sqlPattern := postgresQueries
 	dataTypes := postgresDataTypes
+	nullable := "NULL"
+	defaultVal := ""
+	comment := ""
+	primaryKey := ""
+	autoIncrement := ""
+	if strings.ToUpper(f.IsNullable) == "NO" {
+		nullable = "NOT NULL"
+	}
+	if f.Default != nil {
+		if v, ok := dataTypes[f.DataType]; ok {
+			if v == "BOOLEAN" {
+				if f.Default == "0" {
+					f.Default = "FALSE"
+				} else if f.Default == "1" {
+					f.Default = "TRUE"
+				}
+			}
+		}
+		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+	}
+	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
+		primaryKey = "PRIMARY KEY"
+	}
+	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
+		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
+			f.DataType = "serial"
+			primaryKey = "PRIMARY KEY"
+		}
+	}
 	switch f.DataType {
 	case "string", "varchar", "text", "character varying":
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			if v, ok := dataTypes[f.DataType]; ok {
-				if v == "BOOLEAN" {
-					if f.Default == "0" {
-						f.Default = "FALSE"
-					} else if f.Default == "1" {
-						f.Default = "TRUE"
-					}
-				}
-			}
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		}
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				f.DataType = "serial"
-				primaryKey = "PRIMARY KEY"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "int", "integer", "big_integer", "bigInteger":
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			if v, ok := dataTypes[f.DataType]; ok {
-				if v == "BOOLEAN" {
-					if f.Default == "0" {
-						f.Default = "FALSE"
-					} else if f.Default == "1" {
-						f.Default = "TRUE"
-					}
-				}
-			}
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				f.DataType = "serial"
-				primaryKey = "PRIMARY KEY"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
@@ -384,70 +354,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != nil {
-			if v, ok := dataTypes[f.DataType]; ok {
-				if v == "BOOLEAN" {
-					if f.Default == "0" {
-						f.Default = "FALSE"
-					} else if f.Default == "1" {
-						f.Default = "TRUE"
-					}
-				}
-			}
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				f.DataType = "serial"
-				primaryKey = "PRIMARY KEY"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
-		nullable := "NULL"
-		defaultVal := ""
-		comment := ""
-		primaryKey := ""
-		autoIncrement := ""
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		if strings.ToUpper(f.IsNullable) == "NO" {
-			nullable = "NOT NULL"
-		}
-		if f.Default != "" {
-			if v, ok := dataTypes[f.DataType]; ok {
-				if v == "BOOLEAN" {
-					if f.Default == "0" {
-						f.Default = "FALSE"
-					} else if f.Default == "1" {
-						f.Default = "TRUE"
-					}
-				}
-			}
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
-		}
-
-		if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
-			primaryKey = "PRIMARY KEY"
-		}
-		if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-				f.DataType = "serial"
-				primaryKey = "PRIMARY KEY"
-			}
-		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
 }

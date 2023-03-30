@@ -26,10 +26,10 @@ var data = []byte(`
 		"type": "string"
 	},
 	{
-		"name": "full_description",
+		"name": "ld",
 		"title": "Long Description",
 		"type": "string",
-		"old_name": "ld"
+		"old_name": "full_description"
 	},
 	{
 		"name": "fd",
@@ -65,11 +65,11 @@ func main() {
 	}
 	cfg := metadata.Config{
 		Host:     "localhost",
-		Port:     3306,
-		Driver:   "mysql",
-		Username: "root",
-		Password: "root",
-		Database: "itbeema",
+		Port:     5432,
+		Driver:   "postgresql",
+		Username: "postgres",
+		Password: "postgres",
+		Database: "sujit",
 	}
 	source := metadata.New(cfg)
 	src, err := source.Connect()
@@ -80,6 +80,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(queryToExecute)
-	// fmt.Println(src.Exec(queryToExecute))
+	// fmt.Println(queryToExecute)
+	fmt.Println(src.Exec(queryToExecute))
 }
