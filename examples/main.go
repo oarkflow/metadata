@@ -9,52 +9,48 @@ import (
 
 var data = []byte(`
 [
-	{
-		"name": "cpt_code",
-		"title": "CPT Code",
-		"key": "pri",
-		"type": "string",
-		"length": 100,
-		"is_nullable": "NO",
-		"required": true,
-		"default": true,
-		"comment": "CPT Code"
-	},
-	{
-		"name": "sd",
-		"title": "Short Description",
-		"type": "string"
-	},
-	{
-		"name": "ld",
-		"title": "Long Description",
-		"type": "string",
-		"old_name": "full_description"
-	},
-	{
-		"name": "fd",
-		"title": "Full Description",
-		"type": "string"
-	},
-	{
-		"name": "nfrvu",
-		"title": "nfrvu",
-		"type": "double",
-		"default": 0
-	},
-	{
-		"name": "facrvu",
-		"title": "facrvu",
-		"type": "double",
-		"default": 0
-	},
-	{
-		"name": "status",
-		"title": "Status",
-		"type": "string",
-		"default": null
-	}
-]
+					{
+						"name": "credential_id",
+						"title": "Credential ID",
+						"key": "pri",
+						"type": "int",
+						"is_nullable": "NO",
+						"required": true,
+						"description": "Unique ID of the credential"
+					},
+					{
+						"name": "user_id",
+						"title": "User ID",
+						"type": "int",
+						"is_nullable": "NO"
+					},
+					{
+						"name": "credential",
+						"title": "Credential",
+						"type": "varchar",
+						"length": 256,
+						"is_nullable": "NO"
+					},
+					{
+						"name": "created_at",
+						"title": "Created At",
+						"type": "timestamp",
+						"is_nullable": "NO",
+						"default": "CURRENT_TIMESTAMP"
+					},
+					{
+						"name": "updated_at",
+						"title": "Updated At",
+						"type": "timestamp",
+						"is_nullable": "NO",
+						"default": "CURRENT_TIMESTAMP"
+					},
+					{
+						"name": "deleted_at",
+						"title": "Deleted At",
+						"type": "timestamp"
+					}
+				]
 `)
 
 func main() {
@@ -76,7 +72,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	queryToExecute, err := src.GenerateSQL("lu_cpt", fields)
+	queryToExecute, err := src.GenerateSQL("credentials", fields)
 	if err != nil {
 		panic(err)
 	}

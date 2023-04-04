@@ -26,21 +26,22 @@ var postgresQueries = map[string]string{
 }
 
 var postgresDataTypes = map[string]string{
-	"int":               "INT",
-	"float":             "NUMERIC",
-	"numeric":           "NUMERIC",
-	"double":            "NUMERIC",
-	"decimal":           "NUMERIC",
-	"tinyint":           "BOOLEAN",
-	"string":            "VARCHAR",
-	"varchar":           "VARCHAR",
-	"character varying": "VARCHAR",
-	"text":              "TEXT",
-	"serial":            "SERIAL",
-	"datetime":          "TIMESTAMP",
-	"date":              "DATE",
-	"time":              "TIME",
-	"timestamp":         "TIMESTAMP",
+	"int":                      "NUMERIC",
+	"float":                    "NUMERIC",
+	"numeric":                  "NUMERIC",
+	"double":                   "NUMERIC",
+	"decimal":                  "NUMERIC",
+	"tinyint":                  "BOOLEAN",
+	"string":                   "VARCHAR",
+	"varchar":                  "VARCHAR",
+	"character varying":        "VARCHAR",
+	"text":                     "TEXT",
+	"serial":                   "SERIAL",
+	"datetime":                 "TIMESTAMPTZ",
+	"date":                     "DATE",
+	"time":                     "TIME",
+	"timestamp":                "TIMESTAMP",
+	"timestamp with time zone": "TIMESTAMPTZ",
 }
 
 func (p *Postgres) Connect() (DataSource, error) {
@@ -186,14 +187,26 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		return fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) %s", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, defaultVal)
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d);", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision)
+		if defaultVal != "" {
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+		}
+		return sql
 	case "string", "varchar", "text", "character varying":
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		return fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) %s", table, f.Name, dataTypes[f.DataType], f.Length, defaultVal)
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d);", table, f.Name, dataTypes[f.DataType], f.Length)
+		if defaultVal != "" {
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+		}
+		return sql
 	default:
-		return fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s %s", table, f.Name, dataTypes[f.DataType], defaultVal)
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s;", table, f.Name, dataTypes[f.DataType])
+		if defaultVal != "" {
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+		}
+		return sql
 	}
 }
 
