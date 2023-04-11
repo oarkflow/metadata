@@ -193,7 +193,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d);", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision)
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, f.Name, dataTypes[f.DataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
@@ -202,17 +202,17 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d);", table, f.Name, dataTypes[f.DataType], f.Length)
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Name, dataTypes[f.DataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
 		return sql
 	case "serial":
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s;", table, f.Name, "integer")
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::integer;", table, f.Name, "integer", f.Name)
 		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
 		return sql
 	default:
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s;", table, f.Name, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Name, dataTypes[f.DataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
