@@ -172,7 +172,12 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 				}
 			}
 		}
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		switch f.Default.(type) {
+		case string:
+			defaultVal = "DEFAULT '" + fmt.Sprintf("%v", f.Default) + "'"
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
@@ -339,7 +344,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 				}
 			}
 		}
-		switch def := f.Default.(type) {
+		switch f.Default.(type) {
 		case string:
 			defaultVal = "DEFAULT '" + fmt.Sprintf("%v", f.Default) + "'"
 		default:
