@@ -339,7 +339,12 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 				}
 			}
 		}
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		switch def := f.Default.(type) {
+		case string:
+			defaultVal = "DEFAULT '" + fmt.Sprintf("%v", f.Default) + "'"
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	}
 	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
 		primaryKey = "PRIMARY KEY"
