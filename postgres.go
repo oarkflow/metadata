@@ -142,14 +142,17 @@ func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]m
 
 	return rows, nil
 }
+
 func (p *Postgres) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
+
 func (p *Postgres) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
 	var rows []map[string]any
 	return db.Paginate(p.client.Table(table), &rows, paging)
 }
+
 func (p *Postgres) GetSingle(table string) (map[string]any, error) {
 	var row map[string]any
 	if err := p.client.Table(table).Limit(1).Find(&row).Error; err != nil {
@@ -157,6 +160,7 @@ func (p *Postgres) GetSingle(table string) (map[string]any, error) {
 	}
 	return row, nil
 }
+
 func (p *Postgres) GetType() string {
 	return "postgres"
 }
@@ -202,6 +206,10 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
+		return sql
+	case "serial":
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s;", table, f.Name, "integer")
+		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
 		return sql
 	default:
 		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s;", table, f.Name, dataTypes[f.DataType])
