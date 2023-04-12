@@ -259,9 +259,11 @@ func (p *Postgres) alterSQL(table string, newFields []Field) (string, error) {
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
 		}
+		fieldExists := false
 		if newField.OldName == "" {
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
+					fieldExists = true
 					if postgresDataTypes[existingField.DataType] != postgresDataTypes[newField.DataType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default {
@@ -282,6 +284,12 @@ func (p *Postgres) alterSQL(table string, newFields []Field) (string, error) {
 						sql = append(sql, "COMMENT ON COLUMN "+table+"."+newField.Name+" IS '"+newField.Comment+"';")
 					}
 				}
+			}
+		}
+		if !fieldExists {
+			qry := alterTable + " " + p.FieldAsString(newField, "add_column") + ";"
+			if qry != "" {
+				sql = append(sql, qry)
 			}
 		}
 	}

@@ -32,6 +32,13 @@ var data = []byte(`
 						"is_nullable": "NO"
 					},
 					{
+						"name": "credential_type1",
+						"title": "Credential type",
+						"type": "varchar",
+						"length": 256,
+						"is_nullable": "NO"
+					},
+					{
 						"name": "created_at",
 						"title": "Created At",
 						"type": "timestamp",
@@ -76,6 +83,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println(queryToExecute)
-	fmt.Println(src.Exec(queryToExecute))
+	fmt.Println(queryToExecute)
+	// fmt.Println(src.Exec(queryToExecute))
 }

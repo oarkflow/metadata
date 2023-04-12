@@ -210,6 +210,7 @@ func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
 
 func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
 	var sql []string
+	alterTable := "ALTER TABLE " + table
 	existingFields, err := p.GetFields(table)
 	if err != nil {
 		return "", err
@@ -218,9 +219,11 @@ func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
 		}
+		fieldExists := false
 		if newField.OldName == "" {
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
+					fieldExists = true
 					if mysqlDataTypes[existingField.DataType] != mysqlDataTypes[newField.DataType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default ||
@@ -232,6 +235,13 @@ func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
 						}
 					}
 				}
+			}
+		}
+
+		if !fieldExists {
+			qry := alterTable + " " + p.FieldAsString(newField, "add_column") + ";"
+			if qry != "" {
+				sql = append(sql, qry)
 			}
 		}
 	}
