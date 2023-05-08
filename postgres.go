@@ -26,7 +26,13 @@ var postgresQueries = map[string]string{
 }
 
 var postgresDataTypes = map[string]string{
-	"int":                      "NUMERIC",
+	"smallint":                 "SMALLINT",
+	"int2":                     "SMALLINT",
+	"int":                      "INT",
+	"int4":                     "INT",
+	"integer":                  "INT",
+	"bigint":                   "BIGINT",
+	"int8":                     "BIGINT",
 	"float":                    "NUMERIC",
 	"numeric":                  "NUMERIC",
 	"double":                   "NUMERIC",
@@ -39,10 +45,14 @@ var postgresDataTypes = map[string]string{
 	"character varying":        "VARCHAR",
 	"text":                     "TEXT",
 	"serial":                   "SERIAL",
+	"serial4":                  "SERIAL",
+	"bigserial":                "BIGSERIAL",
+	"serial8":                  "BIGSERIAL",
 	"datetime":                 "TIMESTAMPTZ",
 	"date":                     "DATE",
 	"time":                     "TIME",
 	"timestamp":                "TIMESTAMP",
+	"timestamptz":              "TIMESTAMPTZ",
 	"timestamp with time zone": "TIMESTAMPTZ",
 }
 
@@ -171,9 +181,10 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 	if f.Default != nil {
 		if v, ok := dataTypes[f.DataType]; ok {
 			if v == "BOOLEAN" {
-				if f.Default == "0" {
+				switch f.Default {
+				case "0":
 					f.Default = "FALSE"
-				} else if f.Default == "1" {
+				case "1":
 					f.Default = "TRUE"
 				}
 			}
@@ -186,7 +197,13 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		}
 	}
 	switch f.DataType {
-	case "float", "double", "decimal", "numeric", "int", "integer":
+	case "int", "integer", "smallint", "bigint", "int2", "int4", "int8":
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Name, dataTypes[f.DataType])
+		if defaultVal != "" {
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+		}
+		return sql
+	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 11
 		}
@@ -209,6 +226,10 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		return sql
 	case "serial":
 		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::integer;", table, f.Name, "integer", f.Name)
+		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
+		return sql
+	case "bigserial":
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::bigint;", table, f.Name, "bigint", f.Name)
 		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
 		return sql
 	default:
@@ -350,9 +371,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	if f.Default != nil {
 		if v, ok := dataTypes[f.DataType]; ok {
 			if v == "BOOLEAN" {
-				if f.Default == "0" {
+				switch f.Default {
+				case "0":
 					f.Default = "FALSE"
-				} else if f.Default == "1" {
+				case "1":
 					f.Default = "TRUE"
 				}
 			}
@@ -375,7 +397,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
-	case "int", "integer", "big_integer", "bigInteger":
+	case "smallint", "int", "integer", "bigint", "big_integer", "bigInteger", "int2", "int4", "int8":
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal", "numeric":
