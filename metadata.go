@@ -80,6 +80,11 @@ type Index struct {
 	Nullable   bool   `json:"nullable" gorm:"column:nullable"`
 }
 
+type Indices struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+}
+
 type SourceFields struct {
 	Name  string  `json:"name" gorm:"column:table_name"`
 	Title string  `json:"title" gorm:"-"`
@@ -98,7 +103,7 @@ type DataSource interface {
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
-	GenerateSQL(table string, newFields []Field) (string, error)
+	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
 }
