@@ -111,13 +111,16 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 
 	return rows, nil
 }
+
 func (p *MySQL) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
 	return db.PaginatedResponse{}
 }
+
 func (p *MySQL) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
 	var rows []map[string]any
 	return db.Paginate(p.client.Table(table), &rows, paging)
 }
+
 func (p *MySQL) GetSingle(table string) (map[string]any, error) {
 	var row map[string]any
 	if err := p.client.Table(table).Limit(1).Find(&row).Error; err != nil {
@@ -125,6 +128,7 @@ func (p *MySQL) GetSingle(table string) (map[string]any, error) {
 	}
 	return row, nil
 }
+
 func (p *MySQL) GetType() string {
 	return "mysql"
 }
@@ -267,7 +271,7 @@ func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
 	return "", nil
 }
 
-func (p *MySQL) GenerateSQL(table string, newFields []Field) (string, error) {
+func (p *MySQL) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	sources, err := p.GetSources()
 	if err != nil {
 		return "", err

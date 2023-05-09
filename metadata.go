@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/lib/pq"
 	"github.com/oarkflow/db"
 	"github.com/oarkflow/errors"
 )
@@ -80,6 +81,11 @@ type Index struct {
 	Nullable   bool   `json:"nullable" gorm:"column:nullable"`
 }
 
+type Indices struct {
+	Name    string         `json:"name" gorm:"column:name"`
+	Columns pq.StringArray `json:"columns" gorm:"type:text[] column:columns"`
+}
+
 type SourceFields struct {
 	Name  string  `json:"name" gorm:"column:table_name"`
 	Title string  `json:"title" gorm:"-"`
@@ -98,7 +104,7 @@ type DataSource interface {
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
-	GenerateSQL(table string, newFields []Field) (string, error)
+	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
 }

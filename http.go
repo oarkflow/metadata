@@ -112,7 +112,7 @@ func (h *Http) GetSingle(table string) (map[string]any, error) {
 	return nil, nil
 }
 
-func (h *Http) GenerateSQL(table string, newFields []Field) (string, error) {
+func (h *Http) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	return "", nil
 }
 

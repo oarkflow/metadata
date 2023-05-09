@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	json "github.com/bytedance/sonic"
@@ -17,12 +18,13 @@ type Postgres struct {
 }
 
 var postgresQueries = map[string]string{
-	"create_table":  "CREATE TABLE IF NOT EXISTS %s",
-	"alter_table":   "ALTER TABLE %s",
-	"column":        "%s %s",
-	"add_column":    "ADD COLUMN %s %s",        // {{length}} NOT NULL DEFAULT 1
-	"change_column": "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
-	"remove_column": "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
+	"create_table":        "CREATE TABLE IF NOT EXISTS %s",
+	"alter_table":         "ALTER TABLE %s",
+	"column":              "%s %s",
+	"add_column":          "ADD COLUMN %s %s",        // {{length}} NOT NULL DEFAULT 1
+	"change_column":       "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
+	"remove_column":       "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
+	"create_unique_index": "CREATE UNIQUE INDEX %s ON %s (%s);",
 }
 
 var postgresDataTypes = map[string]string{
@@ -120,6 +122,34 @@ func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error)
 
 func (p *Postgres) GetIndices(table string) (fields []Index, err error) {
 	err = p.client.Raw(`select DISTINCT kcu.constraint_name as "name", kcu.column_name as "column_name", enforced as "nullable" from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name      WHERE tco.table_catalog = ? AND tco.table_schema = 'public' AND tco.table_name = ?;`, p.schema, table).Scan(&fields).Error
+	return
+}
+
+// GetTheIndices gets the indices for a table other than the primary key.
+// This has only been implemented for postgres.
+func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
+	err = p.client.Raw(`
+SELECT
+	i.relname AS name,
+	array_agg(a.attname) AS columns
+FROM
+	pg_class t,
+	pg_class i,
+	pg_index ix,
+	pg_attribute a
+WHERE
+	t.oid = ix.indrelid
+	AND i.oid = ix.indexrelid
+	AND a.attrelid = t.oid
+	AND a.attnum = ANY (ix.indkey)
+	AND t.relkind = 'r' -- ordinary table
+	AND ix.indisunique -- is unique
+	AND NOT ix.indisprimary -- is not primary
+	AND t.relname = ? -- name of table 
+GROUP BY
+	i.relname
+ORDER BY
+	i.relname;`, table).Scan(&incides).Error
 	return
 }
 
@@ -250,10 +280,11 @@ func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
 	return ""
 }
 
-func (p *Postgres) createSQL(table string, newFields []Field) (string, error) {
+func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql string
 	var query []string
 	var comments []string
+	var indexQuery []string
 	for _, field := range newFields {
 		query = append(query, p.FieldAsString(field, "column"))
 		if field.Comment != "" {
@@ -261,18 +292,33 @@ func (p *Postgres) createSQL(table string, newFields []Field) (string, error) {
 			comments = append(comments, comment)
 		}
 	}
+	if len(indices) > 0 {
+		for _, index := range indices {
+			if index.Name == "" {
+				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+			}
+			query := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table,
+				strings.Join(index.Columns, ", "))
+			indexQuery = append(indexQuery, query)
+		}
+	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
 		sql = fmt.Sprintf(postgresQueries["create_table"], table) + " (" + fieldsToUpdate + ");"
 		sql += strings.Join(comments, "")
+		sql += strings.Join(indexQuery, "")
 	}
 	return sql, nil
 }
 
-func (p *Postgres) alterSQL(table string, newFields []Field) (string, error) {
+func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indices) (string, error) {
 	var sql []string
 	alterTable := "ALTER TABLE " + table
 	existingFields, err := p.GetFields(table)
+	if err != nil {
+		return "", err
+	}
+	existingIndices, err := p.GetTheIndices(table)
 	if err != nil {
 		return "", err
 	}
@@ -319,14 +365,42 @@ func (p *Postgres) alterSQL(table string, newFields []Field) (string, error) {
 			sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+newField.Name+`";`)
 		}
 	}
-
+	// create a map to keep track of existing indices by name
+	existingIndicesMap := make(map[string]Indices)
+	for _, existingIndex := range existingIndices {
+		existingIndicesMap[existingIndex.Name] = existingIndex
+	}
+	for _, newIndex := range newIndices {
+		// if new index has no name, generate one
+		if newIndex.Name == "" {
+			newIndex.Name = "idx_" + table + "_" + strings.Join(newIndex.Columns, "_")
+		}
+		existingIndex, indexExists := existingIndicesMap[newIndex.Name]
+		if indexExists {
+			// compare the columns
+			// if they are different, drop the index and create a new one
+			if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) {
+				sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+				sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+			}
+			// Remove existing index from map
+			delete(existingIndicesMap, newIndex.Name)
+		} else {
+			// New index with provided name and columns
+			sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+		}
+	}
+	// drop any remaining indices in the map
+	for _, existingIndex := range existingIndicesMap {
+		sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+	}
 	if len(sql) > 0 {
 		return strings.Join(sql, ""), nil
 	}
 	return "", nil
 }
 
-func (p *Postgres) GenerateSQL(table string, newFields []Field) (string, error) {
+func (p *Postgres) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	sources, err := p.GetSources()
 	if err != nil {
 		return "", err
@@ -339,9 +413,9 @@ func (p *Postgres) GenerateSQL(table string, newFields []Field) (string, error) 
 		}
 	}
 	if !sourceExists {
-		return p.createSQL(table, newFields)
+		return p.createSQL(table, newFields, indices...)
 	}
-	return p.alterSQL(table, newFields)
+	return p.alterSQL(table, newFields, indices...)
 }
 
 func (p *Postgres) Migrate(table string, dst DataSource) error {
