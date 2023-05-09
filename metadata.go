@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/lib/pq"
 	"github.com/oarkflow/db"
 	"github.com/oarkflow/errors"
 )
@@ -81,8 +82,8 @@ type Index struct {
 }
 
 type Indices struct {
-	Name    string   `json:"name"`
-	Columns []string `json:"columns"`
+	Name    string         `json:"name" gorm:"column:name"`
+	Columns pq.StringArray `json:"columns" gorm:"type:text[] column:columns"`
 }
 
 type SourceFields struct {
