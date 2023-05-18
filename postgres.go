@@ -46,6 +46,7 @@ var postgresDataTypes = map[string]string{
 	"string":                   "VARCHAR",
 	"varchar":                  "VARCHAR",
 	"character varying":        "VARCHAR",
+	"year":                     "SMALLINT",
 	"char":                     "CHAR",
 	"character":                "CHAR",
 	"text":                     "TEXT",
@@ -62,13 +63,15 @@ var postgresDataTypes = map[string]string{
 }
 
 func (p *Postgres) Connect() (DataSource, error) {
-	db1, err := gorm.Open(postgres.Open(p.dsn), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
-	if err != nil {
-		return nil, err
+	if p.client == nil {
+		db1, err := gorm.Open(postgres.Open(p.dsn), &gorm.Config{
+			DisableForeignKeyConstraintWhenMigrating: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		p.client = db1
 	}
-	p.client = db1
 	return p, nil
 }
 
@@ -238,10 +241,15 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			}
 		}
 
-		if f.Default == "" {
-			defaultVal = "DEFAULT ''"
-		} else {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		switch def := f.Default.(type) {
+		case string:
+			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
@@ -249,6 +257,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			f.DataType = "serial"
 		}
 	}
+
 	switch f.DataType {
 	case "int", "integer", "smallint", "bigint", "int2", "int4", "int8":
 		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Name, dataTypes[f.DataType])
@@ -327,7 +336,7 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 		}
 	}
 	if len(primaryKeys) > 0 {
-		query = append(query, "("+strings.Join(primaryKeys, ", ")+")")
+		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
 	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
@@ -480,11 +489,21 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 				}
 			}
 		}
-		if f.Default == "" {
-			defaultVal = "DEFAULT ''"
-		} else {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		switch def := f.Default.(type) {
+		case string:
+			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
+	}
+
+	if defaultVal == "DEFAULT '0000-00-00 00:00:00'" {
+		nullable = "NULL"
+		defaultVal = "DEFAULT NULL"
 	}
 	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" && action != "column" {
 		primaryKey = "PRIMARY KEY"
@@ -492,7 +511,9 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 			f.DataType = "serial"
-			primaryKey = "PRIMARY KEY"
+			if action != "column" {
+				primaryKey = "PRIMARY KEY"
+			}
 		}
 	}
 	switch f.DataType {

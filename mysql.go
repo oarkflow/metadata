@@ -45,13 +45,15 @@ var mysqlDataTypes = map[string]string{
 }
 
 func (p *MySQL) Connect() (DataSource, error) {
-	db1, err := gorm.Open(mysql.Open(p.dsn), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
-	if err != nil {
-		return nil, err
+	if p.client == nil {
+		db1, err := gorm.Open(mysql.Open(p.dsn), &gorm.Config{
+			DisableForeignKeyConstraintWhenMigrating: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		p.client = db1
 	}
-	p.client = db1
 	return p, nil
 }
 
@@ -173,16 +175,25 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			}
 		}
 
-		if f.Default == "" {
-			defaultVal = "DEFAULT ''"
-		} else {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		switch def := f.Default.(type) {
+		case string:
+			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
 	}
 	f.Comment = "COMMENT '" + f.Comment + "'"
 	nullable := "NULL"
 	if strings.ToUpper(f.IsNullable) == "NO" {
 		nullable = "NOT NULL"
+	}
+	if defaultVal == "DEFAULT '0000-00-00 00:00:00'" {
+		nullable = "NULL"
+		defaultVal = "DEFAULT NULL"
 	}
 	switch f.DataType {
 	case "float", "double", "decimal", "numeric", "int", "integer":
@@ -223,9 +234,15 @@ func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
 
 func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
 	var sql string
-	var query []string
+	var query, primaryKeys []string
 	for _, newField := range newFields {
+		if strings.ToUpper(newField.Key) == "PRI" {
+			primaryKeys = append(primaryKeys, newField.Name)
+		}
 		query = append(query, p.FieldAsString(newField, "column"))
+	}
+	if len(primaryKeys) > 0 {
+		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
 	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
@@ -337,12 +354,23 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		nullable = "NOT NULL"
 	}
 	if f.Default != nil {
-		if f.Default == "" {
-			defaultVal = "DEFAULT ''"
-		} else {
-			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+
+		switch def := f.Default.(type) {
+		case string:
+			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
 	} else {
+		defaultVal = "DEFAULT NULL"
+	}
+
+	if defaultVal == "DEFAULT '0000-00-00 00:00:00'" {
+		nullable = "NULL"
 		defaultVal = "DEFAULT NULL"
 	}
 	if f.Comment != "" {

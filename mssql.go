@@ -15,13 +15,15 @@ type MsSQL struct {
 }
 
 func (p *MsSQL) Connect() (DataSource, error) {
-	db1, err := gorm.Open(sqlserver.Open(p.dsn), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
-	if err != nil {
-		return nil, err
+	if p.client == nil {
+		db1, err := gorm.Open(sqlserver.Open(p.dsn), &gorm.Config{
+			DisableForeignKeyConstraintWhenMigrating: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		p.client = db1
 	}
-	p.client = db1
 	return p, nil
 }
 

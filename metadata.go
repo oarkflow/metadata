@@ -154,3 +154,79 @@ func New(config Config) DataSource {
 	}
 	return nil
 }
+
+func MigrateDB(srcCon, destCon DataSource, srcTables ...string) error {
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err := srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	t, err := srcCon.GetSources()
+	if err != nil {
+		return err
+	}
+	for _, ta := range t {
+		if len(srcTables) > 0 {
+			if Contains(srcTables, ta.Name) {
+				err := CloneTable(srcCon, destCon, ta.Name, "")
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			err := CloneTable(srcCon, destCon, ta.Name, "")
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func CloneTable(srcCon, destCon DataSource, src, dest string) error {
+	var err error
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err = srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	destCon, err = destCon.Connect()
+	if err != nil {
+		return err
+	}
+	fields, err := srcCon.GetFields(src)
+	if err != nil {
+		return errors.NewE(err, fmt.Sprintf("Unable to get fields for %s", src), "CloneTable")
+	}
+	if dest == "" {
+		dest = src
+	}
+	sql, err := destCon.GenerateSQL(dest, fields)
+	if err != nil {
+		return errors.NewE(err, fmt.Sprintf("Unable to get generate SQL for %s", dest), "CloneTable")
+	}
+	err = destCon.Exec(sql)
+	if err != nil {
+		return errors.NewE(err, fmt.Sprintf("Unable to clone table %s", dest), "CloneTable")
+	}
+	return nil
+}
+
+func Contains[T comparable](s []T, v T) bool {
+	for _, vv := range s {
+		if vv == v {
+			return true
+		}
+	}
+	return false
+}
