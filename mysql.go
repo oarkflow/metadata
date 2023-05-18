@@ -31,6 +31,7 @@ var mysqlDataTypes = map[string]string{
 	"float":     "FLOAT",
 	"double":    "DOUBLE",
 	"decimal":   "DECIMAL",
+	"char":      "CHAR",
 	"tinyint":   "TINYINT",
 	"string":    "VARCHAR",
 	"varchar":   "VARCHAR",
@@ -190,7 +191,7 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
 		}
 		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
-	case "string", "varchar", "text", "character varying":
+	case "string", "varchar", "text", "character varying", "char":
 		if f.Length == 0 {
 			f.Length = 255
 		}
@@ -347,7 +348,7 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		}
 	}
 	switch f.DataType {
-	case "string", "varchar", "text":
+	case "string", "varchar", "text", "char":
 		if f.Length == 0 {
 			f.Length = 255
 		}

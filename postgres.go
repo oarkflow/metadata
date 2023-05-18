@@ -46,6 +46,8 @@ var postgresDataTypes = map[string]string{
 	"string":                   "VARCHAR",
 	"varchar":                  "VARCHAR",
 	"character varying":        "VARCHAR",
+	"char":                     "CHAR",
+	"character":                "CHAR",
 	"text":                     "TEXT",
 	"serial":                   "SERIAL",
 	"serial4":                  "SERIAL",
@@ -261,7 +263,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
 		return sql
-	case "string", "varchar", "text", "character varying":
+	case "string", "varchar", "text", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
@@ -481,7 +483,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		}
 	}
 	switch f.DataType {
-	case "string", "varchar", "text", "character varying":
+	case "string", "varchar", "text", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
