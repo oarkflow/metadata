@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -93,6 +94,7 @@ type SourceFields struct {
 }
 
 type DataSource interface {
+	DB() (*sql.DB, error)
 	Connect() (DataSource, error)
 	GetSources() (tables []Source, err error)
 	GetFields(table string) (fields []Field, err error)
@@ -141,6 +143,12 @@ func New(config Config) DataSource {
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s", config.Host, config.Username, config.Password, config.Database, config.Port, config.SslMode, config.Timezone)
 		return NewPostgres(dsn, config.Database)
+	case "sql-server", "sqlserver", "mssql", "ms-sql":
+		if config.Host == "" {
+			config.Host = "0.0.0.0"
+		}
+		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
+		return NewMsSQL(dsn, config.Database)
 	}
 	return nil
 }

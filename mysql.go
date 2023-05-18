@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -56,6 +57,21 @@ func (p *MySQL) Connect() (DataSource, error) {
 func (p *MySQL) GetSources() (tables []Source, err error) {
 	err = p.client.Table("information_schema.tables").Select("table_name as name").Where("table_schema = ?", p.schema).Find(&tables).Error
 	return
+}
+
+func (p *MySQL) DB() (*sql.DB, error) {
+	return p.client.DB()
+}
+
+func (p *MySQL) Store(val any) error {
+	return p.client.Create(val).Error
+}
+
+func (p *MySQL) StoreInBatches(val any, size int) error {
+	if size <= 0 {
+		size = 100
+	}
+	return p.client.CreateInBatches(val, size).Error
 }
 
 func (p *MySQL) GetFields(table string) (fields []Field, err error) {

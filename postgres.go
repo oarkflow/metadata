@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -74,6 +75,10 @@ func (p *Postgres) GetSources() (tables []Source, err error) {
 	return
 }
 
+func (p *Postgres) DB() (*sql.DB, error) {
+	return p.client.DB()
+}
+
 func (p *Postgres) GetFields(table string) (fields []Field, err error) {
 	var fieldMaps []map[string]any
 	err = p.client.Raw(`
@@ -113,6 +118,17 @@ WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name =  ?
 	}
 	err = json.Unmarshal(bt, &fields)
 	return
+}
+
+func (p *Postgres) Store(val any) error {
+	return p.client.Create(val).Error
+}
+
+func (p *Postgres) StoreInBatches(val any, size int) error {
+	if size <= 0 {
+		size = 100
+	}
+	return p.client.CreateInBatches(val, size).Error
 }
 
 func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error) {

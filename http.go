@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,14 @@ func (h *Http) GetFields(table string) ([]Field, error) {
 	return nil, nil
 }
 
+func (h *Http) Store(val any) error {
+	panic("Implement me")
+}
+
+func (h *Http) StoreInBatches(val any, size int) error {
+	panic("Implement me")
+}
+
 func (h *Http) GetCollection(table string) ([]map[string]any, error) {
 	response, err := h.client.Handle(h.Payload)
 	if err != nil {
@@ -69,8 +78,12 @@ func (h *Http) GetCollection(table string) ([]map[string]any, error) {
 	return nil, nil
 }
 
-func (p *Http) Exec(sql string, values ...any) error {
+func (h *Http) Exec(sql string, values ...any) error {
 	return nil
+}
+
+func (h *Http) DB() (*sql.DB, error) {
+	return nil, nil
 }
 
 func (h *Http) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
