@@ -305,10 +305,11 @@ func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
 
 func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql string
-	var query []string
-	var comments []string
-	var indexQuery []string
+	var query, comments, indexQuery, primaryKeys []string
 	for _, field := range newFields {
+		if strings.ToUpper(field.Key) == "PRI" {
+			primaryKeys = append(primaryKeys, field.Name)
+		}
 		query = append(query, p.FieldAsString(field, "column"))
 		if field.Comment != "" {
 			comment := "COMMENT ON COLUMN " + table + "." + field.Name + " IS '" + field.Comment + "';"
@@ -324,6 +325,9 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 				strings.Join(index.Columns, ", "))
 			indexQuery = append(indexQuery, query)
 		}
+	}
+	if len(primaryKeys) > 0 {
+		query = append(query, "("+strings.Join(primaryKeys, ", ")+")")
 	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
@@ -482,7 +486,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
 		}
 	}
-	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
+	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" && action != "column" {
 		primaryKey = "PRIMARY KEY"
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {

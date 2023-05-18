@@ -348,7 +348,7 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	if f.Comment != "" {
 		comment = "COMMENT '" + f.Comment + "'"
 	}
-	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
+	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" && action != "column" {
 		primaryKey = "PRIMARY KEY"
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
