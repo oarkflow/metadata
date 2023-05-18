@@ -6,12 +6,13 @@ import (
 
 func main() {
 	source, destination := conn()
+
 	/*err := metadata.MigrateDB(source, destination)
 	if err != nil {
 		panic(err)
 	}*/
 
-	err := metadata.CloneTable(source, destination, "tbl_cpt_blacklist_gender", "")
+	err := metadata.CloneTable(source, destination, "tbl_patient_event", "")
 	if err != nil {
 		panic(err)
 	}

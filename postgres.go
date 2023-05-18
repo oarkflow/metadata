@@ -21,7 +21,7 @@ type Postgres struct {
 var postgresQueries = map[string]string{
 	"create_table":        "CREATE TABLE IF NOT EXISTS %s",
 	"alter_table":         "ALTER TABLE %s",
-	"column":              "%s %s",
+	"column":              `%s %s`,
 	"add_column":          "ADD COLUMN %s %s",        // {{length}} NOT NULL DEFAULT 1
 	"change_column":       "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
 	"remove_column":       "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
@@ -50,6 +50,9 @@ var postgresDataTypes = map[string]string{
 	"char":                     "CHAR",
 	"character":                "CHAR",
 	"text":                     "TEXT",
+	"longText":                 "TEXT",
+	"longtext":                 "TEXT",
+	"LongText":                 "TEXT",
 	"serial":                   "SERIAL",
 	"serial4":                  "SERIAL",
 	"bigserial":                "BIGSERIAL",
@@ -277,7 +280,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
 		}
 		return sql
-	case "string", "varchar", "text", "character varying", "char", "character":
+	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
@@ -321,7 +324,7 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 		}
 		query = append(query, p.FieldAsString(field, "column"))
 		if field.Comment != "" {
-			comment := "COMMENT ON COLUMN " + table + "." + field.Name + " IS '" + field.Comment + "';"
+			comment := "COMMENT ON COLUMN " + table + "." + field.Name + " IS '" + strings.ReplaceAll(field.Comment, "'", `"`) + "';"
 			comments = append(comments, comment)
 		}
 	}
@@ -384,7 +387,7 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 					}
 
 					if existingField.Comment != newField.Comment {
-						sql = append(sql, "COMMENT ON COLUMN "+table+"."+newField.Name+" IS '"+newField.Comment+"';")
+						sql = append(sql, "COMMENT ON COLUMN "+table+"."+newField.Name+" IS '"+strings.ReplaceAll(newField.Comment, "'", `"`)+"';")
 					}
 				}
 			}
@@ -517,16 +520,25 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		}
 	}
 	switch f.DataType {
-	case "string", "varchar", "text", "character varying", "char", "character":
+	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
+		if strings.Contains(f.Name, ".") {
+			f.Name = `"` + f.Name + `"`
+		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "smallint", "int", "integer", "bigint", "big_integer", "bigInteger", "int2", "int4", "int8":
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
+		if strings.Contains(f.Name, ".") {
+			f.Name = `"` + f.Name + `"`
+		}
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal", "numeric":
+		if strings.Contains(f.Name, ".") {
+			f.Name = `"` + f.Name + `"`
+		}
 		if f.Length == 0 {
 			f.Length = 11
 		}
@@ -536,6 +548,9 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
+		if strings.Contains(f.Name, ".") {
+			f.Name = `"` + f.Name + `"`
+		}
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
 		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
