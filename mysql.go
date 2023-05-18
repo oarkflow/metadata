@@ -172,7 +172,12 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 				}
 			}
 		}
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+
+		if f.Default == "" {
+			defaultVal = "DEFAULT ''"
+		} else {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	}
 	f.Comment = "COMMENT '" + f.Comment + "'"
 	nullable := "NULL"
@@ -332,7 +337,11 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		nullable = "NOT NULL"
 	}
 	if f.Default != nil {
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		if f.Default == "" {
+			defaultVal = "DEFAULT ''"
+		} else {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	} else {
 		defaultVal = "DEFAULT NULL"
 	}

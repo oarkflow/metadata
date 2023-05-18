@@ -237,7 +237,12 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 				}
 			}
 		}
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+
+		if f.Default == "" {
+			defaultVal = "DEFAULT ''"
+		} else {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
@@ -471,7 +476,11 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 				}
 			}
 		}
-		defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		if f.Default == "" {
+			defaultVal = "DEFAULT ''"
+		} else {
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", f.Default)
+		}
 	}
 	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" {
 		primaryKey = "PRIMARY KEY"
