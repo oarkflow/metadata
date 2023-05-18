@@ -85,15 +85,15 @@ func (p *MsSQL) Migrate(table string, dst DataSource) error {
 	panic("implement me")
 }
 
-func (p *MsSQL) Store(val any) error {
-	return p.client.Create(val).Error
+func (p *MsSQL) Store(table string, val any) error {
+	return p.client.Table(table).Create(val).Error
 }
 
-func (p *MsSQL) StoreInBatches(val any, size int) error {
+func (p *MsSQL) StoreInBatches(table string, val any, size int) error {
 	if size <= 0 {
 		size = 100
 	}
-	return p.client.CreateInBatches(val, size).Error
+	return p.client.Table(table).CreateInBatches(val, size).Error
 }
 
 func (p *MsSQL) GetType() string {

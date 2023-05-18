@@ -63,15 +63,15 @@ func (p *MySQL) DB() (*sql.DB, error) {
 	return p.client.DB()
 }
 
-func (p *MySQL) Store(val any) error {
-	return p.client.Create(val).Error
+func (p *MySQL) Store(table string, val any) error {
+	return p.client.Table(table).Create(val).Error
 }
 
-func (p *MySQL) StoreInBatches(val any, size int) error {
+func (p *MySQL) StoreInBatches(table string, val any, size int) error {
 	if size <= 0 {
 		size = 100
 	}
-	return p.client.CreateInBatches(val, size).Error
+	return p.client.Table(table).CreateInBatches(val, size).Error
 }
 
 func (p *MySQL) GetFields(table string) (fields []Field, err error) {

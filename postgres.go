@@ -120,15 +120,15 @@ WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name =  ?
 	return
 }
 
-func (p *Postgres) Store(val any) error {
-	return p.client.Create(val).Error
+func (p *Postgres) Store(table string, val any) error {
+	return p.client.Table(table).Create(val).Error
 }
 
-func (p *Postgres) StoreInBatches(val any, size int) error {
+func (p *Postgres) StoreInBatches(table string, val any, size int) error {
 	if size <= 0 {
 		size = 100
 	}
-	return p.client.CreateInBatches(val, size).Error
+	return p.client.Table(table).CreateInBatches(val, size).Error
 }
 
 func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error) {

@@ -109,8 +109,8 @@ type DataSource interface {
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
-	Store(val any) error
-	StoreInBatches(val any, size int) error
+	Store(table string, val any) error
+	StoreInBatches(table string, val any, size int) error
 }
 
 func New(config Config) DataSource {

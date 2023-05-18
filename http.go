@@ -43,11 +43,11 @@ func (h *Http) GetFields(table string) ([]Field, error) {
 	return nil, nil
 }
 
-func (h *Http) Store(val any) error {
+func (h *Http) Store(table string, val any) error {
 	panic("Implement me")
 }
 
-func (h *Http) StoreInBatches(val any, size int) error {
+func (h *Http) StoreInBatches(table string, val any, size int) error {
 	panic("Implement me")
 }
 
