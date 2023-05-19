@@ -79,7 +79,7 @@ func (p *Postgres) Connect() (DataSource, error) {
 }
 
 func (p *Postgres) GetSources() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name").Where("table_catalog = ? AND table_schema = 'public'", p.schema).Find(&tables).Error
+	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_catalog = ? AND table_schema = 'public'", p.schema).Find(&tables).Error
 	return
 }
 

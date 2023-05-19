@@ -52,6 +52,7 @@ type Config struct {
 
 type Source struct {
 	Name  string `json:"name" gorm:"column:name"`
+	Type  string `json:"type" gorm:"column:table_type"`
 	Title string `json:"title" gorm:"-"`
 }
 
