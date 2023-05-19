@@ -208,7 +208,6 @@ func CloneTable(srcCon, destCon DataSource, src, dest string) error {
 	if err != nil {
 		return errors.NewE(err, fmt.Sprintf("Unable to get fields for %s", src), "CloneTable")
 	}
-	fmt.Println(fields)
 	if dest == "" {
 		dest = src
 	}
