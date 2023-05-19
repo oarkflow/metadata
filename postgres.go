@@ -21,7 +21,7 @@ type Postgres struct {
 var postgresQueries = map[string]string{
 	"create_table":        "CREATE TABLE IF NOT EXISTS %s",
 	"alter_table":         "ALTER TABLE %s",
-	"column":              `%s %s`,
+	"column":              `"%s" %s`,
 	"add_column":          "ADD COLUMN %s %s",        // {{length}} NOT NULL DEFAULT 1
 	"change_column":       "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
 	"remove_column":       "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
@@ -260,12 +260,12 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			f.DataType = "serial"
 		}
 	}
-
+	fieldName := strings.ToLower(f.Name)
 	switch f.DataType {
 	case "int", "integer", "smallint", "bigint", "int2", "int4", "int8":
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Name, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[f.DataType], fieldName, dataTypes[f.DataType])
 		if defaultVal != "" {
-			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
 		return sql
 	case "float", "double", "decimal", "numeric":
@@ -275,32 +275,32 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, f.Name, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) USING %s::%s;", table, fieldName, dataTypes[f.DataType], f.Length, f.Precision, fieldName, dataTypes[f.DataType])
 		if defaultVal != "" {
-			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
 		return sql
 	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Name, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) USING %s::%s;", table, fieldName, dataTypes[f.DataType], f.Length, fieldName, dataTypes[f.DataType])
 		if defaultVal != "" {
-			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
 		return sql
 	case "serial":
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::integer;", table, f.Name, "integer", f.Name)
-		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::integer;", table, fieldName, "integer", fieldName)
+		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, "DEFAULT nextval('"+table+"_"+fieldName+"_seq'::regclass)")
 		return sql
 	case "bigserial":
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::bigint;", table, f.Name, "bigint", f.Name)
-		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, "DEFAULT nextval('"+table+"_"+f.Name+"_seq'::regclass)")
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::bigint;", table, fieldName, "bigint", fieldName)
+		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, "DEFAULT nextval('"+table+"_"+fieldName+"_seq'::regclass)")
 		return sql
 	default:
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, f.Name, dataTypes[f.DataType], f.Name, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[f.DataType], fieldName, dataTypes[f.DataType])
 		if defaultVal != "" {
-			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, f.Name, defaultVal)
+			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
 		return sql
 	}
@@ -319,12 +319,13 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 	var sql string
 	var query, comments, indexQuery, primaryKeys []string
 	for _, field := range newFields {
+		fieldName := strings.ToLower(field.Name)
 		if strings.ToUpper(field.Key) == "PRI" {
-			primaryKeys = append(primaryKeys, field.Name)
+			primaryKeys = append(primaryKeys, fieldName)
 		}
 		query = append(query, p.FieldAsString(field, "column"))
 		if field.Comment != "" {
-			comment := "COMMENT ON COLUMN " + table + "." + field.Name + " IS '" + strings.ReplaceAll(field.Comment, "'", `"`) + "';"
+			comment := "COMMENT ON COLUMN " + table + "." + fieldName + " IS '" + strings.ReplaceAll(field.Comment, "'", `"`) + "';"
 			comments = append(comments, comment)
 		}
 	}
@@ -367,8 +368,9 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 		}
 		fieldExists := false
 		if newField.OldName == "" {
+			fieldName := strings.ToLower(newField.Name)
 			for _, existingField := range existingFields {
-				if existingField.Name == newField.Name {
+				if strings.ToLower(existingField.Name) == fieldName {
 					fieldExists = true
 					if postgresDataTypes[existingField.DataType] != postgresDataTypes[newField.DataType] ||
 						existingField.Length != newField.Length ||
@@ -380,14 +382,14 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 					}
 					if existingField.IsNullable != newField.IsNullable {
 						if newField.IsNullable == "YES" {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, newField.Name))
+							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, fieldName))
 						} else {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, newField.Name))
+							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, fieldName))
 						}
 					}
 
 					if existingField.Comment != newField.Comment {
-						sql = append(sql, "COMMENT ON COLUMN "+table+"."+newField.Name+" IS '"+strings.ReplaceAll(newField.Comment, "'", `"`)+"';")
+						sql = append(sql, "COMMENT ON COLUMN "+table+"."+fieldName+" IS '"+strings.ReplaceAll(newField.Comment, "'", `"`)+"';")
 					}
 				}
 			}
@@ -400,8 +402,9 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 		}
 	}
 	for _, newField := range newFields {
+		fieldName := strings.ToLower(newField.Name)
 		if newField.OldName != "" {
-			sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+newField.Name+`";`)
+			sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+fieldName+`";`)
 		}
 	}
 	// create a map to keep track of existing indices by name
@@ -519,26 +522,18 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			}
 		}
 	}
+	fieldName := strings.ToLower(f.Name)
 	switch f.DataType {
 	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		if strings.Contains(f.Name, ".") {
-			f.Name = `"` + f.Name + `"`
-		}
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "smallint", "int", "integer", "bigint", "big_integer", "bigInteger", "int2", "int4", "int8":
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		if strings.Contains(f.Name, ".") {
-			f.Name = `"` + f.Name + `"`
-		}
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal", "numeric":
-		if strings.Contains(f.Name, ".") {
-			f.Name = `"` + f.Name + `"`
-		}
 		if f.Length == 0 {
 			f.Length = 11
 		}
@@ -546,13 +541,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			f.Precision = 2
 		}
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
-		if strings.Contains(f.Name, ".") {
-			f.Name = `"` + f.Name + `"`
-		}
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
 }
 
