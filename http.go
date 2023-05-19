@@ -39,6 +39,14 @@ func (h *Http) GetSources() ([]Source, error) {
 	return nil, nil
 }
 
+func (h *Http) GetTables() ([]Source, error) {
+	return nil, nil
+}
+
+func (h *Http) GetViews() ([]Source, error) {
+	return nil, nil
+}
+
 func (h *Http) GetFields(table string) ([]Field, error) {
 	return nil, nil
 }
@@ -84,6 +92,10 @@ func (h *Http) Exec(sql string, values ...any) error {
 
 func (h *Http) DB() (*sql.DB, error) {
 	return nil, nil
+}
+
+func (h *Http) GetDBName() string {
+	return ""
 }
 
 func (h *Http) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {

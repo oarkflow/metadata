@@ -27,7 +27,21 @@ func (p *MsSQL) Connect() (DataSource, error) {
 	return p, nil
 }
 
+func (p *MsSQL) GetDBName() string {
+	return p.schema
+}
+
 func (p *MsSQL) GetSources() (tables []Source, err error) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (p *MsSQL) GetTables() (tables []Source, err error) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (p *MsSQL) GetViews() (tables []Source, err error) {
 	// TODO implement me
 	panic("implement me")
 }

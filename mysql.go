@@ -62,8 +62,22 @@ func (p *MySQL) GetSources() (tables []Source, err error) {
 	return
 }
 
+func (p *MySQL) GetTables() (tables []Source, err error) {
+	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_schema = ? AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
+	return
+}
+
+func (p *MySQL) GetViews() (tables []Source, err error) {
+	err = p.client.Table("information_schema.views").Select("table_name as name, view_definition").Where("table_schema = ?", p.schema).Find(&tables).Error
+	return
+}
+
 func (p *MySQL) DB() (*sql.DB, error) {
 	return p.client.DB()
+}
+
+func (p *MySQL) GetDBName() string {
+	return p.schema
 }
 
 func (p *MySQL) Store(table string, val any) error {
@@ -110,6 +124,8 @@ func (p *MySQL) GetCollection(table string) ([]map[string]any, error) {
 }
 
 func (p *MySQL) Exec(sql string, values ...any) error {
+	sql = strings.ToLower(sql)
+	sql = strings.ReplaceAll(sql, `"`, "`")
 	return p.client.Exec(sql, values...).Error
 }
 

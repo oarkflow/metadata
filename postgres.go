@@ -83,8 +83,22 @@ func (p *Postgres) GetSources() (tables []Source, err error) {
 	return
 }
 
+func (p *Postgres) GetTables() (tables []Source, err error) {
+	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_catalog = ? AND table_schema = 'public' AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
+	return
+}
+
+func (p *Postgres) GetViews() (tables []Source, err error) {
+	err = p.client.Table("information_schema.views").Select("table_name as name, view_definition").Where("table_catalog = ? AND table_schema = 'public' AND table_type='VIEW'", p.schema).Find(&tables).Error
+	return
+}
+
 func (p *Postgres) DB() (*sql.DB, error) {
 	return p.client.DB()
+}
+
+func (p *Postgres) GetDBName() string {
+	return p.schema
 }
 
 func (p *Postgres) GetFields(table string) (fields []Field, err error) {
@@ -186,6 +200,8 @@ func (p *Postgres) GetCollection(table string) ([]map[string]any, error) {
 }
 
 func (p *Postgres) Exec(sql string, values ...any) error {
+	sql = strings.ToLower(sql)
+	sql = strings.ReplaceAll(sql, "`", `"`)
 	return p.client.Exec(sql, values...).Error
 }
 

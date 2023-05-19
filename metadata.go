@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/lib/pq"
 	"github.com/oarkflow/db"
@@ -51,9 +52,10 @@ type Config struct {
 }
 
 type Source struct {
-	Name  string `json:"name" gorm:"column:name"`
-	Type  string `json:"type" gorm:"column:table_type"`
-	Title string `json:"title" gorm:"-"`
+	Name       string `json:"name" gorm:"column:name"`
+	Type       string `json:"type" gorm:"column:table_type"`
+	Definition string `json:"definition" gorm:"column:view_definition"`
+	Title      string `json:"title" gorm:"-"`
 }
 
 type Field struct {
@@ -96,8 +98,11 @@ type SourceFields struct {
 
 type DataSource interface {
 	DB() (*sql.DB, error)
+	GetDBName() string
 	Connect() (DataSource, error)
 	GetSources() (tables []Source, err error)
+	GetTables() ([]Source, error)
+	GetViews() ([]Source, error)
 	GetFields(table string) (fields []Field, err error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
@@ -167,7 +172,25 @@ func MigrateDB(srcCon, destCon DataSource, srcTables ...string) error {
 	if err != nil {
 		return err
 	}
-	t, err := srcCon.GetSources()
+	err = MigrateTables(srcCon, destCon, srcTables...)
+	if err != nil {
+		return err
+	}
+	return MigrateViews(srcCon, destCon, srcTables...)
+}
+
+func MigrateTables(srcCon, destCon DataSource, srcTables ...string) error {
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err := srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	t, err := srcCon.GetTables()
 	if err != nil {
 		return err
 	}
@@ -181,6 +204,39 @@ func MigrateDB(srcCon, destCon DataSource, srcTables ...string) error {
 			}
 		} else {
 			err := CloneTable(srcCon, destCon, ta.Name, "")
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func MigrateViews(srcCon, destCon DataSource, srcTables ...string) error {
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err := srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	views, err := srcCon.GetViews()
+	if err != nil {
+		return err
+	}
+	for _, view := range views {
+		if len(srcTables) > 0 {
+			if Contains(srcTables, view.Name) {
+				err := CloneView(srcCon, destCon, view.Name, "", view.Definition)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			err := CloneView(srcCon, destCon, view.Name, "", view.Definition)
 			if err != nil {
 				return err
 			}
@@ -219,6 +275,44 @@ func CloneTable(srcCon, destCon DataSource, src, dest string) error {
 	err = destCon.Exec(sql)
 	if err != nil {
 		return errors.NewE(err, fmt.Sprintf("Unable to clone table %s", dest), "CloneTable")
+	}
+	return nil
+}
+
+func CloneView(srcCon, destCon DataSource, src, dest, definition string) error {
+	var err error
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err = srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	destCon, err = destCon.Connect()
+	if err != nil {
+		return err
+	}
+	switch destCon.GetType() {
+	case "postgres":
+		definition = strings.ReplaceAll(definition, fmt.Sprintf("`%s`.", srcCon.GetDBName()), "")
+	case "mysql":
+		definition = strings.ReplaceAll(definition, fmt.Sprintf(`"%s".`, srcCon.GetDBName()), "")
+	}
+	if dest == "" {
+		dest = src
+	}
+	if definition == "" {
+		return errors.New("View definition not provided")
+	}
+	sql := "DROP VIEW IF EXISTS " + src + ";"
+	sql += "CREATE VIEW " + dest + " AS " + definition + ";"
+	err = destCon.Exec(sql)
+	if err != nil {
+		fmt.Println(err.Error())
+		// return errors.NewE(err, fmt.Sprintf("Unable to clone view %s", dest), "CloneTable")
 	}
 	return nil
 }
