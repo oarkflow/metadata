@@ -162,13 +162,7 @@ func New(config Config) DataSource {
 }
 
 func MigrateDB(srcCon, destCon DataSource, srcTables ...string) error {
-	if srcCon == nil {
-		return errors.New("No source connection")
-	}
-	if destCon == nil {
-		return errors.New("No destination connection")
-	}
-	srcCon, err := srcCon.Connect()
+	err := connect(srcCon, destCon)
 	if err != nil {
 		return err
 	}
@@ -180,13 +174,7 @@ func MigrateDB(srcCon, destCon DataSource, srcTables ...string) error {
 }
 
 func MigrateTables(srcCon, destCon DataSource, srcTables ...string) error {
-	if srcCon == nil {
-		return errors.New("No source connection")
-	}
-	if destCon == nil {
-		return errors.New("No destination connection")
-	}
-	srcCon, err := srcCon.Connect()
+	err := connect(srcCon, destCon)
 	if err != nil {
 		return err
 	}
@@ -196,7 +184,7 @@ func MigrateTables(srcCon, destCon DataSource, srcTables ...string) error {
 	}
 	for _, ta := range t {
 		if len(srcTables) > 0 {
-			if Contains(srcTables, ta.Name) {
+			if contains(srcTables, ta.Name) {
 				err := CloneTable(srcCon, destCon, ta.Name, "")
 				if err != nil {
 					return err
@@ -213,13 +201,7 @@ func MigrateTables(srcCon, destCon DataSource, srcTables ...string) error {
 }
 
 func MigrateViews(srcCon, destCon DataSource, srcTables ...string) error {
-	if srcCon == nil {
-		return errors.New("No source connection")
-	}
-	if destCon == nil {
-		return errors.New("No destination connection")
-	}
-	srcCon, err := srcCon.Connect()
+	err := connect(srcCon, destCon)
 	if err != nil {
 		return err
 	}
@@ -229,7 +211,7 @@ func MigrateViews(srcCon, destCon DataSource, srcTables ...string) error {
 	}
 	for _, view := range views {
 		if len(srcTables) > 0 {
-			if Contains(srcTables, view.Name) {
+			if contains(srcTables, view.Name) {
 				err := CloneView(srcCon, destCon, view.Name, "", view.Definition)
 				if err != nil {
 					return err
@@ -246,18 +228,7 @@ func MigrateViews(srcCon, destCon DataSource, srcTables ...string) error {
 }
 
 func CloneTable(srcCon, destCon DataSource, src, dest string) error {
-	var err error
-	if srcCon == nil {
-		return errors.New("No source connection")
-	}
-	if destCon == nil {
-		return errors.New("No destination connection")
-	}
-	srcCon, err = srcCon.Connect()
-	if err != nil {
-		return err
-	}
-	destCon, err = destCon.Connect()
+	err := connect(srcCon, destCon)
 	if err != nil {
 		return err
 	}
@@ -280,18 +251,7 @@ func CloneTable(srcCon, destCon DataSource, src, dest string) error {
 }
 
 func CloneView(srcCon, destCon DataSource, src, dest, definition string) error {
-	var err error
-	if srcCon == nil {
-		return errors.New("No source connection")
-	}
-	if destCon == nil {
-		return errors.New("No destination connection")
-	}
-	srcCon, err = srcCon.Connect()
-	if err != nil {
-		return err
-	}
-	destCon, err = destCon.Connect()
+	err := connect(srcCon, destCon)
 	if err != nil {
 		return err
 	}
@@ -317,7 +277,23 @@ func CloneView(srcCon, destCon DataSource, src, dest, definition string) error {
 	return nil
 }
 
-func Contains[T comparable](s []T, v T) bool {
+func connect(srcCon, destCon DataSource) error {
+	var err error
+	if srcCon == nil {
+		return errors.New("No source connection")
+	}
+	if destCon == nil {
+		return errors.New("No destination connection")
+	}
+	srcCon, err = srcCon.Connect()
+	if err != nil {
+		return err
+	}
+	_, err = destCon.Connect()
+	return err
+}
+
+func contains[T comparable](s []T, v T) bool {
 	for _, vv := range s {
 		if vv == v {
 			return true
