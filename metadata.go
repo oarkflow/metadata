@@ -96,23 +96,27 @@ type SourceFields struct {
 	Field []Field `json:"fields"`
 }
 
+type DB interface {
+}
+
 type DataSource interface {
 	DB() (*sql.DB, error)
 	GetDBName() string
-	Connect() (DataSource, error)
 	GetSources() (tables []Source, err error)
 	GetTables() ([]Source, error)
 	GetViews() ([]Source, error)
-	GetFields(table string) (fields []Field, err error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
-	GetCollection(table string) ([]map[string]any, error)
 	Exec(sql string, values ...any) error
+	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
+
+	Connect() (DataSource, error)
+	GetFields(table string) (fields []Field, err error)
+	GetCollection(table string) ([]map[string]any, error)
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
 	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
-	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
 	Store(table string, val any) error
