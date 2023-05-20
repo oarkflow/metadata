@@ -202,6 +202,7 @@ func (p *Postgres) GetCollection(table string) ([]map[string]any, error) {
 func (p *Postgres) Exec(sql string, values ...any) error {
 	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, "`", `"`)
+	sql = strings.ReplaceAll(sql, `"/"`, `'/'`)
 	return p.client.Exec(sql, values...).Error
 }
 
