@@ -142,6 +142,8 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 		if err := p.client.Raw(query).Find(&rows, param).Error; err != nil {
 			return nil, err
 		}
+	} else if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+		return nil, err
 	}
 
 	return rows, nil
