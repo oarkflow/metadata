@@ -6,19 +6,25 @@ import (
 	"github.com/oarkflow/db"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type MsSQL struct {
-	schema string
-	dsn    string
-	client *gorm.DB
+	schema     string
+	dsn        string
+	client     *gorm.DB
+	disableLog bool
 }
 
 func (p *MsSQL) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := gorm.Open(sqlserver.Open(p.dsn), &gorm.Config{
+		config := &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
-		})
+		}
+		if p.disableLog {
+			config.Logger.LogMode(logger.Silent)
+		}
+		db1, err := gorm.Open(sqlserver.Open(p.dsn), config)
 		if err != nil {
 			return nil, err
 		}
@@ -121,9 +127,10 @@ func (p *MsSQL) DB() (*sql.DB, error) {
 	return p.client.DB()
 }
 
-func NewMsSQL(dsn, database string) *MsSQL {
+func NewMsSQL(dsn, database string, disableLog bool) *MsSQL {
 	return &MsSQL{
-		schema: database,
-		dsn:    dsn,
+		schema:     database,
+		dsn:        dsn,
+		disableLog: disableLog,
 	}
 }

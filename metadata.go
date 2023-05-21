@@ -37,18 +37,19 @@ func (j Any) Value() (driver.Value, error) {
 }
 
 type Config struct {
-	Name     string `json:"name"`
-	Key      string `json:"key"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Driver   string `json:"driver"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Database string `json:"database"`
-	SslMode  string `json:"ssl_mode"`
-	Timezone string `json:"timezone"`
-	Charset  string `json:"charset"`
-	Location string `json:"location"`
+	Name          string `json:"name"`
+	Key           string `json:"key"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	Driver        string `json:"driver"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	Database      string `json:"database"`
+	SslMode       string `json:"ssl_mode"`
+	Timezone      string `json:"timezone"`
+	Charset       string `json:"charset"`
+	Location      string `json:"location"`
+	DisableLogger bool   `json:"disable_logger"`
 }
 
 type Source struct {
@@ -139,7 +140,7 @@ func New(config Config) DataSource {
 			config.Location = "Local"
 		}
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s", config.Username, config.Password, config.Host, config.Port, config.Database, config.Charset, true, config.Location)
-		return NewMySQL(dsn, config.Database)
+		return NewMySQL(dsn, config.Database, config.DisableLogger)
 	case "postgres", "psql", "postgresql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
@@ -154,13 +155,13 @@ func New(config Config) DataSource {
 			config.Timezone = "UTC"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s", config.Host, config.Username, config.Password, config.Database, config.Port, config.SslMode, config.Timezone)
-		return NewPostgres(dsn, config.Database)
+		return NewPostgres(dsn, config.Database, config.DisableLogger)
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}
 		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
-		return NewMsSQL(dsn, config.Database)
+		return NewMsSQL(dsn, config.Database, config.DisableLogger)
 	}
 	return nil
 }

@@ -8,9 +8,9 @@ require (
 	github.com/oarkflow/db v0.0.0-20230322151631-c3150713c9f8
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/protocol v0.0.2
-	gorm.io/driver/mysql v1.5.0
-	gorm.io/driver/postgres v1.5.0
-	gorm.io/driver/sqlserver v1.4.3
+	gorm.io/driver/mysql v1.5.1
+	gorm.io/driver/postgres v1.5.2
+	gorm.io/driver/sqlserver v1.5.0
 	gorm.io/gorm v1.25.1
 )
 

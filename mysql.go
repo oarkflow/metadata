@@ -9,12 +9,14 @@ import (
 	"github.com/oarkflow/db"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type MySQL struct {
-	schema string
-	dsn    string
-	client *gorm.DB
+	schema     string
+	dsn        string
+	client     *gorm.DB
+	disableLog bool
 }
 
 var mysqlQueries = map[string]string{
@@ -46,9 +48,13 @@ var mysqlDataTypes = map[string]string{
 
 func (p *MySQL) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := gorm.Open(mysql.Open(p.dsn), &gorm.Config{
+		config := &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
-		})
+		}
+		if p.disableLog {
+			config.Logger.LogMode(logger.Silent)
+		}
+		db1, err := gorm.Open(mysql.Open(p.dsn), config)
 		if err != nil {
 			return nil, err
 		}
@@ -433,10 +439,11 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewMySQL(dsn, database string) *MySQL {
+func NewMySQL(dsn, database string, disableLog bool) *MySQL {
 	return &MySQL{
-		schema: database,
-		dsn:    dsn,
-		client: nil,
+		schema:     database,
+		dsn:        dsn,
+		client:     nil,
+		disableLog: disableLog,
 	}
 }

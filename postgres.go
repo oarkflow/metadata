@@ -10,12 +10,14 @@ import (
 	"github.com/oarkflow/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Postgres struct {
-	schema string
-	dsn    string
-	client *gorm.DB
+	schema     string
+	dsn        string
+	client     *gorm.DB
+	disableLog bool
 }
 
 var postgresQueries = map[string]string{
@@ -67,9 +69,14 @@ var postgresDataTypes = map[string]string{
 
 func (p *Postgres) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := gorm.Open(postgres.Open(p.dsn), &gorm.Config{
+
+		config := &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
-		})
+		}
+		if p.disableLog {
+			config.Logger.LogMode(logger.Silent)
+		}
+		db1, err := gorm.Open(postgres.Open(p.dsn), config)
 		if err != nil {
 			return nil, err
 		}
@@ -567,10 +574,11 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewPostgres(dsn, database string) *Postgres {
+func NewPostgres(dsn, database string, disableLog bool) *Postgres {
 	return &Postgres{
-		schema: database,
-		dsn:    dsn,
-		client: nil,
+		schema:     database,
+		dsn:        dsn,
+		client:     nil,
+		disableLog: disableLog,
 	}
 }
