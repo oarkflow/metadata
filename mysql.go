@@ -48,11 +48,16 @@ var mysqlDataTypes = map[string]string{
 
 func (p *MySQL) Connect() (DataSource, error) {
 	if p.client == nil {
+
+		var logLevel logger.LogLevel
+		if p.disableLog {
+			logLevel = logger.Silent
+		} else {
+			logLevel = logger.Error
+		}
 		config := &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
-		}
-		if p.disableLog {
-			config.Logger.LogMode(logger.Silent)
+			Logger:                                   logger.Default.LogMode(logLevel),
 		}
 		db1, err := gorm.Open(mysql.Open(p.dsn), config)
 		if err != nil {

@@ -18,11 +18,15 @@ type MsSQL struct {
 
 func (p *MsSQL) Connect() (DataSource, error) {
 	if p.client == nil {
+		var logLevel logger.LogLevel
+		if p.disableLog {
+			logLevel = logger.Silent
+		} else {
+			logLevel = logger.Error
+		}
 		config := &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
-		}
-		if p.disableLog {
-			config.Logger.LogMode(logger.Silent)
+			Logger:                                   logger.Default.LogMode(logLevel),
 		}
 		db1, err := gorm.Open(sqlserver.Open(p.dsn), config)
 		if err != nil {
