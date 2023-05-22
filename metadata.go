@@ -13,6 +13,13 @@ import (
 	"github.com/oarkflow/errors"
 )
 
+var builtInFunctions = []string{
+	"current_timestamp",
+	"now()",
+	"true",
+	"false",
+}
+
 type Any json.RawMessage
 
 // Scan scan value into Jsonb, implements sql.Scanner interface

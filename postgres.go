@@ -527,10 +527,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 		}
 		switch def := f.Default.(type) {
 		case string:
-			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+			if contains(builtInFunctions, strings.ToLower(def)) {
 				defaultVal = fmt.Sprintf("DEFAULT %s", def)
 			} else {
-				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
 			}
 		default:
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
