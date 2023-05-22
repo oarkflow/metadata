@@ -530,7 +530,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			if contains(builtInFunctions, strings.ToLower(def)) {
 				defaultVal = fmt.Sprintf("DEFAULT %s", def)
 			} else {
-				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
 			}
 		default:
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
