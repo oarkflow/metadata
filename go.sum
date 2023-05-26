@@ -8,6 +8,8 @@ github.com/bytedance/gopkg v0.0.0-20230512060433-7f5f1dee0b1e/go.mod h1:5tCTcGDV
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=
 github.com/bytedance/sonic v1.8.8 h1:Kj4AYbZSeENfyXicsYppYKO0K2YWab+i2UTSY7Ukz9Q=
 github.com/bytedance/sonic v1.8.8/go.mod h1:i736AoUSYt75HyZLoJW9ERYxcy6eaN6h4BZXU064P/U=
+github.com/bytedance/sonic v1.9.0 h1:iwLYBds8bYtzwOX7kmdYwtS+aY2GgekVoIs2/IxR0tM=
+github.com/bytedance/sonic v1.9.0/go.mod h1:i736AoUSYt75HyZLoJW9ERYxcy6eaN6h4BZXU064P/U=
 github.com/chenzhuoyu/base64x v0.0.0-20211019084208-fb5309c8db06/go.mod h1:DH46F32mSOjUmXrMHnKwZdA8wcEefY7UVqBKYGjpdQY=
 github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 h1:qSGYFH7+jGhDF8vLC+iwCD4WpbV1EBDSzWkJODFLams=
 github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311/go.mod h1:b583jCggY9gE99b6G5LEC39OIiVsWj+R97kbl5odCEk=
@@ -70,6 +72,8 @@ github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/microsoft/go-mssqldb v0.21.0 h1:p2rpHIL7TlSv1QrbXJUAcbyRKnIT0C9rRkH2E4OjLn8=
 github.com/microsoft/go-mssqldb v0.21.0/go.mod h1:+4wZTUnz/SV6nffv+RRRB/ss8jPng5Sho2SmM1l2ts4=
+github.com/microsoft/go-mssqldb v1.0.0 h1:k2p2uuG8T5T/7Hp7/e3vMGTnnR0sU4h8d1CcC71iLHU=
+github.com/microsoft/go-mssqldb v1.0.0/go.mod h1:+4wZTUnz/SV6nffv+RRRB/ss8jPng5Sho2SmM1l2ts4=
 github.com/modocache/gover v0.0.0-20171022184752-b58185e213c5/go.mod h1:caMODM3PzxT8aQXRPkAt8xlV/e7d7w8GM5g0fa5F0D8=
 github.com/montanaflynn/stats v0.6.6/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/oarkflow/db v0.0.0-20230322151631-c3150713c9f8 h1:L8W8+XUCO1mNH0UCCnIDVMo6L4KsxUHRgCiApizglzU=
@@ -78,6 +82,8 @@ github.com/oarkflow/errors v0.0.6 h1:qTBzVblrX6bFbqYLfatsrZHMBPchOZiIE3pfVzh1+k8
 github.com/oarkflow/errors v0.0.6/go.mod h1:UETn0Q55PJ+YUbpR4QImIoBavd6QvJtyW/oeTT7ghZM=
 github.com/oarkflow/frame v0.0.44 h1:ZrmtlisnJ+O/TPUCKFjaATpa8dvKlbJSyjWtQn36SrM=
 github.com/oarkflow/frame v0.0.44/go.mod h1:GXOrAqOTFYp0+/F9PrKqfLXPpqX9uOUA/HPZb1Agwaw=
+github.com/oarkflow/frame v0.0.47 h1:10F1z2OSh2UjIgpiimKSdEnCL2Hd+pIyQSYMqs2xe64=
+github.com/oarkflow/frame v0.0.47/go.mod h1:NW6FouW3AvoQmqK26eu4xFHtzjXQRe5djjJOk/QmJ1E=
 github.com/oarkflow/log v1.0.73 h1:UQW1uMaKJBHr7EcLA5yZGbiO7aXHmtFi23TyC/o0diQ=
 github.com/oarkflow/log v1.0.73/go.mod h1:XTPYB9X9MZGeL1wFeG+Of8NKXTuS4hWR1tAJTxS0img=
 github.com/oarkflow/protocol v0.0.2 h1:/g/dK7wZyImJkQ10X25tA4R1wJmNKnaqeKeJd5azuIM=

@@ -94,6 +94,13 @@ func (p *Postgres) GetSources() (tables []Source, err error) {
 	return
 }
 
+func (p *Postgres) GetDataTypeMap(dataType string) string {
+	if v, ok := postgresDataTypes[dataType]; ok {
+		return v
+	}
+	return "VARCHAR"
+}
+
 func (p *Postgres) GetTables() (tables []Source, err error) {
 	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_catalog = ? AND table_schema = 'public' AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
 	return

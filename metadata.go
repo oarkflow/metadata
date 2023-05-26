@@ -111,6 +111,7 @@ type DataSource interface {
 	DB() (*sql.DB, error)
 	GetDBName() string
 	GetSources() (tables []Source, err error)
+	GetDataTypeMap(dataType string) string
 	GetTables() ([]Source, error)
 	GetViews() ([]Source, error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)

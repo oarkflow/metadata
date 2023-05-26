@@ -39,6 +39,10 @@ func (h *Http) GetSources() ([]Source, error) {
 	return nil, nil
 }
 
+func (h *Http) GetDataTypeMap(dataType string) string {
+	return "VARCHAR"
+}
+
 func (h *Http) GetTables() ([]Source, error) {
 	return nil, nil
 }

@@ -3,7 +3,7 @@ module github.com/oarkflow/metadata
 go 1.20
 
 require (
-	github.com/bytedance/sonic v1.8.8
+	github.com/bytedance/sonic v1.9.0
 	github.com/lib/pq v1.10.9
 	github.com/oarkflow/db v0.0.0-20230322151631-c3150713c9f8
 	github.com/oarkflow/errors v0.0.6
@@ -27,8 +27,8 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
-	github.com/microsoft/go-mssqldb v0.21.0 // indirect
-	github.com/oarkflow/frame v0.0.44 // indirect
+	github.com/microsoft/go-mssqldb v1.0.0 // indirect
+	github.com/oarkflow/frame v0.0.47 // indirect
 	github.com/oarkflow/log v1.0.73 // indirect
 	github.com/oarkflow/xid v1.2.5 // indirect
 	github.com/puzpuzpuz/xsync v1.5.2 // indirect

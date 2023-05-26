@@ -73,6 +73,13 @@ func (p *MySQL) GetSources() (tables []Source, err error) {
 	return
 }
 
+func (p *MySQL) GetDataTypeMap(dataType string) string {
+	if v, ok := mysqlDataTypes[dataType]; ok {
+		return v
+	}
+	return "VARCHAR"
+}
+
 func (p *MySQL) GetTables() (tables []Source, err error) {
 	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_schema = ? AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
 	return

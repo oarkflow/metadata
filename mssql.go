@@ -46,6 +46,10 @@ func (p *MsSQL) GetSources() (tables []Source, err error) {
 	panic("implement me")
 }
 
+func (p *MsSQL) GetDataTypeMap(dataType string) string {
+	panic("implement me")
+}
+
 func (p *MsSQL) GetTables() (tables []Source, err error) {
 	// TODO implement me
 	panic("implement me")
