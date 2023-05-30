@@ -157,7 +157,7 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 				query = strings.Split(query, " LIMIT ")[0] + " LIMIT 10"
 			}
 		}
-		if err := p.client.Raw(query).Find(&rows, param).Error; err != nil {
+		if err := p.client.Raw(query, param).Find(&rows).Error; err != nil {
 			return nil, err
 		}
 	} else if err := p.client.Raw(query).Find(&rows).Error; err != nil {
