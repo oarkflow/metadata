@@ -234,8 +234,14 @@ func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]m
 				query = strings.Split(query, " LIMIT ")[0] + " LIMIT 10"
 			}
 		}
-		if err := p.client.Raw(query, param).Find(&rows).Error; err != nil {
-			return nil, err
+		if len(param) > 0 {
+			if err := p.client.Raw(query, param).Find(&rows).Error; err != nil {
+				return nil, err
+			}
+		} else {
+			if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+				return nil, err
+			}
 		}
 	} else if err := p.client.Raw(query).Find(&rows).Error; err != nil {
 		return nil, err
