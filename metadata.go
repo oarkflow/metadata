@@ -95,6 +95,7 @@ type Index struct {
 
 type Indices struct {
 	Name    string         `json:"name" gorm:"column:name"`
+	Unique  bool           `json:"unique" gorm:"column:unique"`
 	Columns pq.StringArray `json:"columns" gorm:"type:text[] column:columns"`
 }
 
@@ -104,8 +105,7 @@ type SourceFields struct {
 	Field []Field `json:"fields"`
 }
 
-type DB interface {
-}
+type DB interface{}
 
 type DataSource interface {
 	DB() (*sql.DB, error)

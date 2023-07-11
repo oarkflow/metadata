@@ -28,6 +28,7 @@ var postgresQueries = map[string]string{
 	"change_column":       "ALTER COLUMN %s TYPE %s", // {{length}} NOT NULL DEFAULT 1
 	"remove_column":       "ALTER COLUMN % TYPE %s",  // {{length}} NOT NULL DEFAULT 1
 	"create_unique_index": "CREATE UNIQUE INDEX %s ON %s (%s);",
+	"create_index":        "CREATE INDEX %s ON %s (%s);",
 }
 
 var postgresDataTypes = map[string]string{
@@ -187,7 +188,8 @@ func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
 	err = p.client.Raw(`
 SELECT
 	i.relname AS name,
-	array_agg(a.attname) AS columns
+	array_agg(a.attname) AS columns,
+	ix.indisunique AS unique
 FROM
 	pg_class t,
 	pg_class i,
@@ -199,11 +201,12 @@ WHERE
 	AND a.attrelid = t.oid
 	AND a.attnum = ANY (ix.indkey)
 	AND t.relkind = 'r' -- ordinary table
-	AND ix.indisunique -- is unique
+	-- AND ix.indisunique -- is unique
 	AND NOT ix.indisprimary -- is not primary
 	AND t.relname = ? -- name of table 
 GROUP BY
-	i.relname
+	i.relname,
+	ix.indisunique
 ORDER BY
 	i.relname;`, table).Scan(&incides).Error
 	return
@@ -377,9 +380,16 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 			if index.Name == "" {
 				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
 			}
-			query := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table,
-				strings.Join(index.Columns, ", "))
-			indexQuery = append(indexQuery, query)
+			switch index.Unique {
+			case true:
+				query := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table,
+					strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, query)
+			case false:
+				query := fmt.Sprintf(postgresQueries["create_index"], index.Name, table,
+					strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, query)
+			}
 		}
 	}
 	if len(primaryKeys) > 0 {
@@ -466,13 +476,23 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 			// if they are different, drop the index and create a new one
 			if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) {
 				sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
-				sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+				switch newIndex.Unique {
+				case true:
+					sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+				case false:
+					sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+				}
 			}
 			// Remove existing index from map
 			delete(existingIndicesMap, newIndex.Name)
 		} else {
 			// New index with provided name and columns
-			sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+			switch newIndex.Unique {
+			case true:
+				sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+			case false:
+				sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+			}
 		}
 	}
 	// drop any remaining indices in the map
