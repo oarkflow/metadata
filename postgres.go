@@ -66,6 +66,8 @@ var postgresDataTypes = map[string]string{
 	"timestamp":                "TIMESTAMP",
 	"timestamptz":              "TIMESTAMPTZ",
 	"timestamp with time zone": "TIMESTAMPTZ",
+	"jsonb":                    "JSONB",
+	"json":                     "JSON",
 }
 
 func (p *Postgres) Connect() (DataSource, error) {
