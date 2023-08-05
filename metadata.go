@@ -123,7 +123,7 @@ type DataSource interface {
 	GetFields(table string) (fields []Field, err error)
 	GetCollection(table string) ([]map[string]any, error)
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
-	GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse
+	GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse
 	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
 	Migrate(table string, dst DataSource) error

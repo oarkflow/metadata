@@ -107,7 +107,7 @@ func (h *Http) GetRawCollection(query string, params ...map[string]any) ([]map[s
 	panic("implement me")
 }
 
-func (h *Http) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
+func (h *Http) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }

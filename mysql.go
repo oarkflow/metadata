@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -173,8 +173,9 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 	return rows, nil
 }
 
-func (p *MySQL) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
-	return db.PaginatedResponse{}
+func (p *MySQL) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+	var rows []map[string]any
+	return db.PaginateRaw(p.client, query, &rows, paging, params...)
 }
 
 func (p *MySQL) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {

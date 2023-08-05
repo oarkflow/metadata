@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -255,9 +255,9 @@ func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]m
 	return rows, nil
 }
 
-func (p *Postgres) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
-	// TODO implement me
-	panic("implement me")
+func (p *Postgres) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+	var rows []map[string]any
+	return db.PaginateRaw(p.client, query, &rows, paging, params...)
 }
 
 func (p *Postgres) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {

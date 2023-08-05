@@ -90,7 +90,7 @@ func (p *MsSQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 	panic("implement me")
 }
 
-func (p *MsSQL) GetRawPaginatedCollection(query string, params ...map[string]any) db.PaginatedResponse {
+func (p *MsSQL) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
