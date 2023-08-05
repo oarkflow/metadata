@@ -175,6 +175,7 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 
 func (p *MySQL) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
 	var rows []map[string]any
+	paging.Raw = true
 	return db.PaginateRaw(p.client, query, &rows, paging, params...)
 }
 

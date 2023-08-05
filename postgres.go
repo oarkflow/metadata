@@ -257,6 +257,7 @@ func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]m
 
 func (p *Postgres) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
 	var rows []map[string]any
+	paging.Raw = true
 	return db.PaginateRaw(p.client, query, &rows, paging, params...)
 }
 
