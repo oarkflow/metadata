@@ -149,11 +149,11 @@ func (h *Http) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
-func NewHttp(config *http.Options, payload protocol.Payload) *Http {
+func NewHttp(config *http.Options, payload protocol.Payload, serviceType string) *Http {
 	if config.ResponseCallback == nil {
 		config.ResponseCallback = defaultResponseCallback
 	}
-	httpClient, _ := protocol.NewHTTP(config)
+	httpClient, _ := protocol.NewHTTP(config, serviceType)
 	return &Http{
 		client:  httpClient,
 		Payload: payload,
