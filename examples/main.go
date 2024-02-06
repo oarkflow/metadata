@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/oarkflow/db"
+
 	"github.com/oarkflow/metadata"
 )
 
@@ -16,13 +16,16 @@ func main() {
 		Database: "clear20",
 	}
 	source := metadata.New(cfg)
-	source.Connect()
-	rs := source.GetRawPaginatedCollection("SELECT * FROM migrations", db.Paging{
-		Limit: 10,
-		Page:  1,
-		Raw:   true,
-	})
-	fmt.Println(rs.Pagination)
+	_, err := source.Connect()
+	if err != nil {
+		panic(err)
+	}
+	fields, err := source.GetFields("users")
+	if err != nil {
+		panic(err)
+	}
+	schema := metadata.SourceAsJsonSchema(fields, false, "users")
+	fmt.Println(schema.String())
 }
 
 func migrationTest() {

@@ -3,7 +3,7 @@ package metadata
 import (
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
+	stdJson "encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,6 +11,8 @@ import (
 	"github.com/lib/pq"
 	"github.com/oarkflow/db"
 	"github.com/oarkflow/errors"
+	"github.com/oarkflow/json"
+	"github.com/oarkflow/pkg/str"
 )
 
 var builtInFunctions = []string{
@@ -20,7 +22,7 @@ var builtInFunctions = []string{
 	"false",
 }
 
-type Any json.RawMessage
+type Any stdJson.RawMessage
 
 // Scan scan value into Jsonb, implements sql.Scanner interface
 func (j *Any) Scan(value interface{}) error {
@@ -29,8 +31,8 @@ func (j *Any) Scan(value interface{}) error {
 		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
 	}
 
-	result := json.RawMessage{}
-	err := json.Unmarshal(bytes, &result)
+	result := stdJson.RawMessage{}
+	err := stdJson.Unmarshal(bytes, &result)
 	*j = Any(result)
 	return err
 }
@@ -40,7 +42,7 @@ func (j Any) Value() (driver.Value, error) {
 	if len(j) == 0 {
 		return nil, nil
 	}
-	return json.RawMessage(j).MarshalJSON()
+	return stdJson.RawMessage(j).MarshalJSON()
 }
 
 type Config struct {
@@ -100,9 +102,89 @@ type Indices struct {
 }
 
 type SourceFields struct {
-	Name  string  `json:"name" gorm:"column:table_name"`
-	Title string  `json:"title" gorm:"-"`
-	Field []Field `json:"fields"`
+	Name   string  `json:"name" gorm:"column:table_name"`
+	Title  string  `json:"title" gorm:"-"`
+	Fields []Field `json:"fields"`
+}
+
+type Schema struct {
+	Type                 string             `json:"type"`
+	Description          string             `json:"description,omitempty"`
+	Default              string             `json:"default,omitempty"`
+	Pattern              string             `json:"pattern,omitempty"`
+	Format               string             `json:"format,omitempty"`
+	Properties           map[string]*Schema `json:"properties,omitempty"`
+	Required             []string           `json:"required,omitempty"`
+	AdditionalProperties bool               `json:"additionalProperties,omitempty"`
+	PrimaryKeys          []string           `json:"primaryKeys,omitempty"`
+	MaxLength            int                `json:"maxLength,omitempty"`
+}
+
+func (s *Schema) Bytes() []byte {
+	bt, _ := json.Marshal(s)
+	return bt
+}
+
+func (s *Schema) String() string {
+	bt, _ := json.Marshal(s)
+	return str.FromByte(bt)
+}
+
+func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *Schema {
+	schema := &Schema{
+		Type:                 "object",
+		Properties:           make(map[string]*Schema),
+		AdditionalProperties: additionalProperties,
+	}
+	if len(source) > 0 {
+		schema.Description = source[0]
+	}
+	for _, field := range fields {
+		prop := &Schema{
+			Type: "string",
+		}
+		if field.Default != nil && !strings.Contains(fmt.Sprintf("%v", field.Default), "nextval") {
+			prop.Default = fmt.Sprintf("%v", field.Default)
+		}
+
+		if field.Length != 0 {
+			prop.MaxLength = field.Length
+		}
+		if field.Key == "PRI" {
+			schema.PrimaryKeys = append(schema.PrimaryKeys, field.Name)
+		}
+		if field.IsNullable == "NO" {
+			def := fmt.Sprintf("%v", field.Default)
+			if !(def == "now()" || strings.ToUpper(field.DataType) == "TIMESTAMP" || def == "CURRENT_TIMESTAMP" || field.Key == "PRI") {
+				schema.Required = append(schema.Required, field.Name)
+			}
+
+		}
+		switch strings.ToUpper(field.DataType) {
+		case "BOOL", "BOOLEAN":
+			prop.Type = "boolean"
+		case "FLOAT", "FLOAT32", "DECIMAL", "DOUBLE":
+			prop.Type = "number"
+		case "DATETIME", "TIMESTAMP":
+			prop.Format = "date-time"
+		case "DATE":
+			prop.Format = "date"
+		case "NUMERIC":
+			if field.Precision == 0 {
+				prop.Type = "integer"
+			} else {
+				prop.Type = "number"
+			}
+		case "INT", "INT2", "INT4", "INTEGER", "BIGINT", "INT8", "SERIAL", "BIGSERIAL":
+			prop.Type = "integer"
+		}
+		schema.Properties[field.Name] = prop
+	}
+	return schema
+}
+
+func (s *SourceFields) AsJsonSchema(additionalProperties bool) *Schema {
+	return AsJsonSchema(s.Fields, additionalProperties, s.Title)
 }
 
 type DB interface{}
