@@ -52,7 +52,7 @@ func (h *Http) GetDataTypeMap(dataType string) string {
 	return "VARCHAR"
 }
 
-func (h *Http) LastInsertedID() any {
+func (h *Http) LastInsertedID() (any, error) {
 	panic("implement me")
 }
 
