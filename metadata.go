@@ -203,7 +203,8 @@ type DataSource interface {
 	Commit() *gorm.DB
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
-
+	LastInsertedID() (id any, err error)
+	MaxID(table, field string) (id any, err error)
 	Connect() (DataSource, error)
 	GetFields(table string) (fields []Field, err error)
 	GetCollection(table string) ([]map[string]any, error)

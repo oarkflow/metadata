@@ -133,6 +133,16 @@ func (p *MySQL) GetIndices(table string) (fields []Index, err error) {
 	return
 }
 
+func (p *MySQL) LastInsertedID() (id any, err error) {
+	err = p.client.Raw("SELECT LAST_INSERT_ID();").Scan(&id).Error
+	return
+}
+
+func (p *MySQL) MaxID(table, field string) (id any, err error) {
+	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	return
+}
+
 func (p *MySQL) GetCollection(table string) ([]map[string]any, error) {
 	var rows []map[string]any
 	if err := p.client.Table(table).Find(&rows).Error; err != nil {

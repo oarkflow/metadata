@@ -52,6 +52,14 @@ func (h *Http) GetDataTypeMap(dataType string) string {
 	return "VARCHAR"
 }
 
+func (h *Http) LastInsertedID() any {
+	panic("implement me")
+}
+
+func (h *Http) MaxID(table, field string) (id any, err error) {
+	panic("implement me")
+}
+
 func (h *Http) GetTables() ([]Source, error) {
 	return nil, nil
 }

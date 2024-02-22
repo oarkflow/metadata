@@ -174,6 +174,16 @@ func (p *Postgres) StoreInBatches(table string, val any, size int) error {
 	return p.client.Table(table).CreateInBatches(val, size).Error
 }
 
+func (p *Postgres) LastInsertedID() (id any, err error) {
+	err = p.client.Raw("SELECT LASTVAL();").Scan(&id).Error
+	return
+}
+
+func (p *Postgres) MaxID(table, field string) (id any, err error) {
+	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	return
+}
+
 func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error) {
 	err = p.client.Raw(`select kcu.column_name as "name", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = ? AND kcu.table_schema = 'public' AND kcu.table_name = ? order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, p.schema, table).Scan(&fields).Error
 	return

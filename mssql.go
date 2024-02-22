@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/oarkflow/db"
 	"gorm.io/driver/sqlserver"
@@ -39,6 +40,16 @@ func (p *MsSQL) Connect() (DataSource, error) {
 
 func (p *MsSQL) GetDBName() string {
 	return p.schema
+}
+
+func (p *MsSQL) LastInsertedID() (id any, err error) {
+	err = p.client.Raw("SELECT SCOPE_IDENTITY();").Scan(&id).Error
+	return
+}
+
+func (p *MsSQL) MaxID(table, field string) (id any, err error) {
+	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	return
 }
 
 func (p *MsSQL) GetSources() (tables []Source, err error) {
