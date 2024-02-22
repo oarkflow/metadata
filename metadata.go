@@ -13,6 +13,7 @@ import (
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
+	"gorm.io/gorm"
 )
 
 var builtInFunctions = []string{
@@ -198,6 +199,8 @@ type DataSource interface {
 	GetViews() ([]Source, error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
+	Begin() *gorm.DB
+	Commit() *gorm.DB
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 

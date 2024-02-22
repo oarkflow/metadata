@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	schema := metadata.SourceAsJsonSchema(fields, false, "users")
+	schema := metadata.AsJsonSchema(fields, false, "users")
 	fmt.Println(schema.String())
 }
 

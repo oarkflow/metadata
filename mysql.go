@@ -2,10 +2,10 @@ package metadata
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"encoding/json"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -145,6 +145,14 @@ func (p *MySQL) Exec(sql string, values ...any) error {
 	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, `"`, "`")
 	return p.client.Exec(sql, values...).Error
+}
+
+func (p *MySQL) Begin() *gorm.DB {
+	return p.client.Begin()
+}
+
+func (p *MySQL) Commit() *gorm.DB {
+	return p.client.Commit()
 }
 
 func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {

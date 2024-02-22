@@ -13,6 +13,7 @@ import (
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/protocol"
 	"github.com/oarkflow/protocol/http"
+	"gorm.io/gorm"
 )
 
 type Http struct {
@@ -33,6 +34,14 @@ func (h *Http) GetIndices(table string) (fields []Index, err error) {
 func (h *Http) Connect() (DataSource, error) {
 	err := h.client.Setup()
 	return h, err
+}
+
+func (p *Http) Begin() *gorm.DB {
+	return nil
+}
+
+func (p *Http) Commit() *gorm.DB {
+	return nil
 }
 
 func (h *Http) GetSources() ([]Source, error) {

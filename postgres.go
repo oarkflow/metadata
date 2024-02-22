@@ -2,11 +2,11 @@ package metadata
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"encoding/json"
 	"github.com/oarkflow/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -537,6 +537,14 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	}
 	fmt.Println(sql)
 	return nil
+}
+
+func (p *Postgres) Begin() *gorm.DB {
+	return p.client.Begin()
+}
+
+func (p *Postgres) Commit() *gorm.DB {
+	return p.client.Commit()
 }
 
 func (p *Postgres) FieldAsString(f Field, action string) string {

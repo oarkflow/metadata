@@ -70,6 +70,14 @@ func (p *MsSQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
 	panic("implement me")
 }
 
+func (p *MsSQL) Begin() *gorm.DB {
+	return p.client.Begin()
+}
+
+func (p *MsSQL) Commit() *gorm.DB {
+	return p.client.Commit()
+}
+
 func (p *MsSQL) GetIndices(table string) (fields []Index, err error) {
 	// TODO implement me
 	panic("implement me")
