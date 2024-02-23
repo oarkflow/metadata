@@ -549,6 +549,10 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
+func (p *Postgres) Error() error {
+	return p.client.Error
+}
+
 func (p *Postgres) Begin() DataSource {
 	tx := p.client.Begin()
 	return NewFromClient(tx)

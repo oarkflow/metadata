@@ -39,6 +39,10 @@ func (p *Http) Begin() DataSource {
 	return nil
 }
 
+func (p *Http) Error() error {
+	return nil
+}
+
 func (p *Http) Commit() DataSource {
 	return nil
 }

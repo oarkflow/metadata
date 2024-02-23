@@ -86,6 +86,10 @@ func (p *MsSQL) Begin() DataSource {
 	return NewFromClient(tx)
 }
 
+func (p *MsSQL) Error() error {
+	return p.client.Error
+}
+
 func (p *MsSQL) Commit() DataSource {
 	tx := p.client.Commit()
 	return NewFromClient(tx)

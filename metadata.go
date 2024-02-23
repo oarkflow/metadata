@@ -201,6 +201,7 @@ type DataSource interface {
 	GetIndices(table string) (fields []Index, err error)
 	Begin() DataSource
 	Commit() DataSource
+	Error() error
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	LastInsertedID() (id any, err error)

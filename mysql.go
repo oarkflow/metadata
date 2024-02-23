@@ -157,6 +157,10 @@ func (p *MySQL) Exec(sql string, values ...any) error {
 	return p.client.Exec(sql, values...).Error
 }
 
+func (p *MySQL) Error() error {
+	return p.client.Error
+}
+
 func (p *MySQL) Begin() DataSource {
 	tx := p.client.Begin()
 	return NewFromClient(tx)
