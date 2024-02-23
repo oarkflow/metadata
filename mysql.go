@@ -157,12 +157,14 @@ func (p *MySQL) Exec(sql string, values ...any) error {
 	return p.client.Exec(sql, values...).Error
 }
 
-func (p *MySQL) Begin() *gorm.DB {
-	return p.client.Begin()
+func (p *MySQL) Begin() DataSource {
+	tx := p.client.Begin()
+	return NewFromClient(tx)
 }
 
-func (p *MySQL) Commit() *gorm.DB {
-	return p.client.Commit()
+func (p *MySQL) Commit() DataSource {
+	tx := p.client.Commit()
+	return NewFromClient(tx)
 }
 
 func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {

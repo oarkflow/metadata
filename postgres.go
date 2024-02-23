@@ -549,12 +549,14 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
-func (p *Postgres) Begin() *gorm.DB {
-	return p.client.Begin()
+func (p *Postgres) Begin() DataSource {
+	tx := p.client.Begin()
+	return NewFromClient(tx)
 }
 
-func (p *Postgres) Commit() *gorm.DB {
-	return p.client.Commit()
+func (p *Postgres) Commit() DataSource {
+	tx := p.client.Commit()
+	return NewFromClient(tx)
 }
 
 func (p *Postgres) FieldAsString(f Field, action string) string {

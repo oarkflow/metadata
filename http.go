@@ -13,7 +13,6 @@ import (
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/protocol"
 	"github.com/oarkflow/protocol/http"
-	"gorm.io/gorm"
 )
 
 type Http struct {
@@ -36,11 +35,11 @@ func (h *Http) Connect() (DataSource, error) {
 	return h, err
 }
 
-func (p *Http) Begin() *gorm.DB {
+func (p *Http) Begin() DataSource {
 	return nil
 }
 
-func (p *Http) Commit() *gorm.DB {
+func (p *Http) Commit() DataSource {
 	return nil
 }
 

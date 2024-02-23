@@ -199,8 +199,8 @@ type DataSource interface {
 	GetViews() ([]Source, error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
-	Begin() *gorm.DB
-	Commit() *gorm.DB
+	Begin() DataSource
+	Commit() DataSource
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	LastInsertedID() (id any, err error)
@@ -218,9 +218,21 @@ type DataSource interface {
 	StoreInBatches(table string, val any, size int) error
 }
 
+func NewFromClient(client *gorm.DB) DataSource {
+	switch client.Dialector.Name() {
+	case "mysql", "mariadb":
+		return &MySQL{client: client}
+	case "postgres", "psql", "postgresql":
+		return &Postgres{client: client}
+	case "sql-server", "sqlserver", "mssql", "ms-sql":
+		return &MsSQL{client: client}
+	}
+	return nil
+}
+
 func New(config Config) DataSource {
 	switch config.Driver {
-	case "mysql":
+	case "mysql", "mariadb":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}

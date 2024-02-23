@@ -81,12 +81,14 @@ func (p *MsSQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
 	panic("implement me")
 }
 
-func (p *MsSQL) Begin() *gorm.DB {
-	return p.client.Begin()
+func (p *MsSQL) Begin() DataSource {
+	tx := p.client.Begin()
+	return NewFromClient(tx)
 }
 
-func (p *MsSQL) Commit() *gorm.DB {
-	return p.client.Commit()
+func (p *MsSQL) Commit() DataSource {
+	tx := p.client.Commit()
+	return NewFromClient(tx)
 }
 
 func (p *MsSQL) GetIndices(table string) (fields []Index, err error) {

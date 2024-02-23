@@ -43,7 +43,7 @@ func migrationTest() {
 
 }
 
-func conn() (metadata.DataSource, metadata.DataSource) {
+func conn() (src, dst metadata.DataSource) {
 	cfg1 := metadata.Config{
 		Host:     "localhost",
 		Port:     3307,
@@ -60,7 +60,7 @@ func conn() (metadata.DataSource, metadata.DataSource) {
 		Password: "postgres",
 		Database: "clear",
 	}
-	source := metadata.New(cfg1)
-	destination := metadata.New(cfg)
-	return source, destination
+	src = metadata.New(cfg1)
+	dst = metadata.New(cfg)
+	return
 }
