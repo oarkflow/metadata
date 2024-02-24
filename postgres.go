@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/oarkflow/db"
 	"gorm.io/driver/postgres"
@@ -18,6 +19,7 @@ type Postgres struct {
 	dsn        string
 	client     *gorm.DB
 	disableLog bool
+	pooling    ConnectionPooling
 }
 
 var postgresQueries = map[string]string{
@@ -72,7 +74,6 @@ var postgresDataTypes = map[string]string{
 
 func (p *Postgres) Connect() (DataSource, error) {
 	if p.client == nil {
-
 		var logLevel logger.LogLevel
 		if p.disableLog {
 			logLevel = logger.Silent
@@ -80,13 +81,21 @@ func (p *Postgres) Connect() (DataSource, error) {
 			logLevel = logger.Error
 		}
 		config := &gorm.Config{
-			DisableForeignKeyConstraintWhenMigrating: true,
 			Logger:                                   logger.Default.LogMode(logLevel),
+			DisableForeignKeyConstraintWhenMigrating: true,
 		}
 		db1, err := gorm.Open(postgres.Open(p.dsn), config)
 		if err != nil {
 			return nil, err
 		}
+		clientDB, err := db1.DB()
+		if err != nil {
+			return nil, err
+		}
+		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
 		p.client = db1
 	}
 	return p, nil
@@ -553,6 +562,14 @@ func (p *Postgres) Error() error {
 	return p.client.Error
 }
 
+func (p *Postgres) Close() error {
+	clientDB, err := p.client.DB()
+	if err != nil {
+		return err
+	}
+	return clientDB.Close()
+}
+
 func (p *Postgres) Begin() DataSource {
 	tx := p.client.Begin()
 	return NewFromClient(tx)
@@ -638,11 +655,12 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewPostgres(dsn, database string, disableLog bool) *Postgres {
+func NewPostgres(dsn, database string, disableLog bool, pooling ConnectionPooling) *Postgres {
 	return &Postgres{
 		schema:     database,
 		dsn:        dsn,
 		client:     nil,
 		disableLog: disableLog,
+		pooling:    pooling,
 	}
 }

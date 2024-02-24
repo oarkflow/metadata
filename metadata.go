@@ -46,6 +46,13 @@ func (j Any) Value() (driver.Value, error) {
 	return stdJson.RawMessage(j).MarshalJSON()
 }
 
+type ConnectionPooling struct {
+	MaxLifetime int64 `yaml:"max_lifetime" json:"max_lifetime"`
+	MaxIdleTime int64 `yaml:"max_idle_time" json:"max_idle_time"`
+	MaxOpenCons int   `yaml:"max_open_cons" json:"max_open_cons"`
+	MaxIdleCons int   `yaml:"max_idle_cons" json:"max_idle_cons"`
+}
+
 type Config struct {
 	Name          string `json:"name"`
 	Key           string `json:"key"`
@@ -60,6 +67,10 @@ type Config struct {
 	Charset       string `json:"charset"`
 	Location      string `json:"location"`
 	DisableLogger bool   `json:"disable_logger"`
+	MaxLifetime   int64  `yaml:"max_lifetime" json:"max_lifetime"`
+	MaxIdleTime   int64  `yaml:"max_idle_time" json:"max_idle_time"`
+	MaxOpenCons   int    `yaml:"max_open_cons" json:"max_open_cons"`
+	MaxIdleCons   int    `yaml:"max_idle_cons" json:"max_idle_cons"`
 }
 
 type Source struct {
@@ -217,6 +228,7 @@ type DataSource interface {
 	GetType() string
 	Store(table string, val any) error
 	StoreInBatches(table string, val any, size int) error
+	Close() error
 }
 
 func NewFromClient(client *gorm.DB) DataSource {
@@ -232,6 +244,24 @@ func NewFromClient(client *gorm.DB) DataSource {
 }
 
 func New(config Config) DataSource {
+	connectionPooling := ConnectionPooling{
+		MaxLifetime: 60,
+		MaxIdleTime: 10,
+		MaxOpenCons: 100,
+		MaxIdleCons: 50,
+	}
+	if config.MaxLifetime > 0 {
+		connectionPooling.MaxLifetime = config.MaxLifetime
+	}
+	if config.MaxIdleTime > 0 {
+		connectionPooling.MaxIdleTime = config.MaxIdleTime
+	}
+	if config.MaxOpenCons > 0 {
+		connectionPooling.MaxOpenCons = config.MaxOpenCons
+	}
+	if config.MaxIdleCons > 0 {
+		connectionPooling.MaxIdleCons = config.MaxIdleCons
+	}
 	switch config.Driver {
 	case "mysql", "mariadb":
 		if config.Host == "" {
@@ -247,7 +277,7 @@ func New(config Config) DataSource {
 			config.Location = "Local"
 		}
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s", config.Username, config.Password, config.Host, config.Port, config.Database, config.Charset, true, config.Location)
-		return NewMySQL(dsn, config.Database, config.DisableLogger)
+		return NewMySQL(dsn, config.Database, config.DisableLogger, connectionPooling)
 	case "postgres", "psql", "postgresql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
@@ -262,13 +292,13 @@ func New(config Config) DataSource {
 			config.Timezone = "UTC"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s", config.Host, config.Username, config.Password, config.Database, config.Port, config.SslMode, config.Timezone)
-		return NewPostgres(dsn, config.Database, config.DisableLogger)
+		return NewPostgres(dsn, config.Database, config.DisableLogger, connectionPooling)
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}
 		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
-		return NewMsSQL(dsn, config.Database, config.DisableLogger)
+		return NewMsSQL(dsn, config.Database, config.DisableLogger, connectionPooling)
 	}
 	return nil
 }

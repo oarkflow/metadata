@@ -22,17 +22,21 @@ type Http struct {
 	ExpiresIn   int
 }
 
-func (h *Http) GetForeignKeys(table string) (fields []ForeignKey, err error) {
+func (p *Http) GetForeignKeys(table string) (fields []ForeignKey, err error) {
 	return nil, nil
 }
 
-func (h *Http) GetIndices(table string) (fields []Index, err error) {
+func (p *Http) GetIndices(table string) (fields []Index, err error) {
 	return nil, nil
 }
 
-func (h *Http) Connect() (DataSource, error) {
-	err := h.client.Setup()
-	return h, err
+func (p *Http) Connect() (DataSource, error) {
+	err := p.client.Setup()
+	return p, err
+}
+
+func (p *Http) Close() error {
+	return nil
 }
 
 func (p *Http) Begin() DataSource {
@@ -47,53 +51,53 @@ func (p *Http) Commit() DataSource {
 	return nil
 }
 
-func (h *Http) GetSources() ([]Source, error) {
+func (p *Http) GetSources() ([]Source, error) {
 	return nil, nil
 }
 
-func (h *Http) GetDataTypeMap(dataType string) string {
+func (p *Http) GetDataTypeMap(dataType string) string {
 	return "VARCHAR"
 }
 
-func (h *Http) LastInsertedID() (any, error) {
+func (p *Http) LastInsertedID() (any, error) {
 	panic("implement me")
 }
 
-func (h *Http) MaxID(table, field string) (id any, err error) {
+func (p *Http) MaxID(table, field string) (id any, err error) {
 	panic("implement me")
 }
 
-func (h *Http) GetTables() ([]Source, error) {
+func (p *Http) GetTables() ([]Source, error) {
 	return nil, nil
 }
 
-func (h *Http) GetViews() ([]Source, error) {
+func (p *Http) GetViews() ([]Source, error) {
 	return nil, nil
 }
 
-func (h *Http) GetFields(table string) ([]Field, error) {
+func (p *Http) GetFields(table string) ([]Field, error) {
 	return nil, nil
 }
 
-func (h *Http) Store(table string, val any) error {
+func (p *Http) Store(table string, val any) error {
 	panic("Implement me")
 }
 
-func (h *Http) StoreInBatches(table string, val any, size int) error {
+func (p *Http) StoreInBatches(table string, val any, size int) error {
 	panic("Implement me")
 }
 
-func (h *Http) GetCollection(table string) ([]map[string]any, error) {
-	response, err := h.client.Handle(h.Payload)
+func (p *Http) GetCollection(table string) ([]map[string]any, error) {
+	response, err := p.client.Handle(p.Payload)
 	if err != nil {
 		return nil, err
 	}
-	if h.client.Config.DataField == "" {
-		h.client.Config.DataField = "data"
+	if p.client.Config.DataField == "" {
+		p.client.Config.DataField = "data"
 	}
 	switch data := response.(type) {
 	case []byte:
-		resp, err := h.client.Config.ResponseCallback(data, h.client.Config.DataField)
+		resp, err := p.client.Config.ResponseCallback(data, p.client.Config.DataField)
 		if err != nil {
 			return nil, err
 		}
@@ -110,45 +114,45 @@ func (h *Http) GetCollection(table string) ([]map[string]any, error) {
 	return nil, nil
 }
 
-func (h *Http) Exec(sql string, values ...any) error {
+func (p *Http) Exec(sql string, values ...any) error {
 	return nil
 }
 
-func (h *Http) DB() (*sql.DB, error) {
+func (p *Http) DB() (*sql.DB, error) {
 	return nil, nil
 }
 
-func (h *Http) GetDBName() string {
+func (p *Http) GetDBName() string {
 	return ""
 }
 
-func (h *Http) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
+func (p *Http) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (h *Http) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+func (p *Http) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (h *Http) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
+func (p *Http) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (h *Http) GetType() string {
+func (p *Http) GetType() string {
 	return "http"
 }
 
-func (h *Http) GetSingle(table string) (map[string]any, error) {
-	response, err := h.client.Handle(h.Payload)
+func (p *Http) GetSingle(table string) (map[string]any, error) {
+	response, err := p.client.Handle(p.Payload)
 	if err != nil {
 		return nil, err
 	}
 	switch data := response.(type) {
 	case []byte:
-		resp, err := h.client.Config.ResponseCallback(data, h.client.Config.DataField)
+		resp, err := p.client.Config.ResponseCallback(data, p.client.Config.DataField)
 		if err != nil {
 			return nil, err
 		}
@@ -161,11 +165,11 @@ func (h *Http) GetSingle(table string) (map[string]any, error) {
 	return nil, nil
 }
 
-func (h *Http) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *Http) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	return "", nil
 }
 
-func (h *Http) Migrate(table string, dst DataSource) error {
+func (p *Http) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
@@ -238,7 +242,7 @@ func defaultResponseCallback(response []byte, dataField ...string) (any, error) 
 	return row, nil
 }
 
-func (h *Http) setupBasicAuth(auth *http.BasicAuth) error {
+func (p *Http) setupBasicAuth(auth *http.BasicAuth) error {
 	var resp map[string]interface{}
 	encoded := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", auth.Username, auth.Password)))
 	data := make(map[string]interface{})
@@ -256,9 +260,9 @@ func (h *Http) setupBasicAuth(auth *http.BasicAuth) error {
 		}
 	}
 	if auth.URL == "" {
-		h.client.Config.MU.Lock()
-		h.client.Config.Headers["Authorization"] = "Basic " + encoded
-		h.client.Config.MU.Unlock()
+		p.client.Config.MU.Lock()
+		p.client.Config.Headers["Authorization"] = "Basic " + encoded
+		p.client.Config.MU.Unlock()
 		return nil
 	}
 	payload := protocol.Payload{
@@ -267,7 +271,7 @@ func (h *Http) setupBasicAuth(auth *http.BasicAuth) error {
 		Data:    data,
 		Headers: headers,
 	}
-	bodyBytes, err := h.client.Handle(payload)
+	bodyBytes, err := p.client.Handle(payload)
 	if err != nil {
 		return err
 	}
@@ -276,31 +280,31 @@ func (h *Http) setupBasicAuth(auth *http.BasicAuth) error {
 		return err
 	}
 	if auth.TokenField == "" {
-		h.AccessToken = encoded
-		h.client.Config.MU.Lock()
-		h.client.Config.Headers["Authorization"] = "Bearer " + h.AccessToken
-		h.client.Config.MU.Unlock()
+		p.AccessToken = encoded
+		p.client.Config.MU.Lock()
+		p.client.Config.Headers["Authorization"] = "Bearer " + p.AccessToken
+		p.client.Config.MU.Unlock()
 		return nil
 	}
 	if val, ok := resp[auth.TokenField]; ok {
-		if h.client.Config.Headers == nil {
-			h.client.Config.Headers = make(map[string]string)
+		if p.client.Config.Headers == nil {
+			p.client.Config.Headers = make(map[string]string)
 		}
-		h.AccessToken = val.(string)
+		p.AccessToken = val.(string)
 		if auth.ExpiryField != "" {
 			if v, ok := resp[auth.ExpiryField]; ok {
-				h.ExpiresIn = int(v.(float64))
+				p.ExpiresIn = int(v.(float64))
 			}
 		}
-		h.client.Config.MU.Lock()
-		h.client.Config.Headers["Authorization"] = "Bearer " + h.AccessToken
-		h.client.Config.MU.Unlock()
+		p.client.Config.MU.Lock()
+		p.client.Config.Headers["Authorization"] = "Bearer " + p.AccessToken
+		p.client.Config.MU.Unlock()
 		return nil
 	}
 	return nil
 }
 
-func (h *Http) setupOAuth2(auth *http.OAuth2) error {
+func (p *Http) setupOAuth2(auth *http.OAuth2) error {
 	var resp map[string]interface{}
 	payload := protocol.Payload{
 		URL:     auth.URL,
@@ -308,7 +312,7 @@ func (h *Http) setupOAuth2(auth *http.OAuth2) error {
 		Data:    auth.Data,
 		Headers: auth.Headers,
 	}
-	response, err := h.client.Handle(payload)
+	response, err := p.client.Handle(payload)
 	if err != nil {
 		return err
 	}
@@ -324,42 +328,42 @@ func (h *Http) setupOAuth2(auth *http.OAuth2) error {
 		return errors.New("no token field defined")
 	}
 	if val, ok := resp[auth.TokenField]; ok {
-		if h.client.Config.Headers == nil {
-			h.client.Config.Headers = make(map[string]string)
+		if p.client.Config.Headers == nil {
+			p.client.Config.Headers = make(map[string]string)
 		}
-		h.AccessToken = val.(string)
+		p.AccessToken = val.(string)
 		if auth.ExpiryField != "" {
 			if v, ok := resp[auth.ExpiryField]; ok {
-				h.ExpiresIn = int(v.(float64))
+				p.ExpiresIn = int(v.(float64))
 			}
 		}
-		h.client.Config.MU.Lock()
-		h.client.Config.Headers["Authorization"] = "Bearer " + h.AccessToken
-		h.client.Config.MU.Unlock()
+		p.client.Config.MU.Lock()
+		p.client.Config.Headers["Authorization"] = "Bearer " + p.AccessToken
+		p.client.Config.MU.Unlock()
 		return nil
 	}
 	return fmt.Errorf("invalid Credential: %s", string(bodyBytes))
 }
 
-func (h *Http) setupBearerToken(auth *http.BearerToken) error {
-	if h.client.Config.Headers == nil {
-		h.client.Config.Headers = make(map[string]string)
+func (p *Http) setupBearerToken(auth *http.BearerToken) error {
+	if p.client.Config.Headers == nil {
+		p.client.Config.Headers = make(map[string]string)
 	}
-	h.AccessToken = auth.Token
-	h.client.Config.MU.Lock()
-	h.client.Config.Headers["Authorization"] = "Bearer " + h.AccessToken
-	h.client.Config.MU.Unlock()
+	p.AccessToken = auth.Token
+	p.client.Config.MU.Lock()
+	p.client.Config.Headers["Authorization"] = "Bearer " + p.AccessToken
+	p.client.Config.MU.Unlock()
 	return nil
 }
 
-func (h *Http) SetupAuth() error {
-	switch auth := h.client.Config.Auth.(type) {
+func (p *Http) SetupAuth() error {
+	switch auth := p.client.Config.Auth.(type) {
 	case *http.BearerToken:
-		return h.setupBearerToken(auth)
+		return p.setupBearerToken(auth)
 	case *http.BasicAuth:
-		return h.setupBasicAuth(auth)
+		return p.setupBasicAuth(auth)
 	case *http.OAuth2:
-		return h.setupOAuth2(auth)
+		return p.setupOAuth2(auth)
 	default:
 		return nil
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/oarkflow/db"
 	"gorm.io/driver/mysql"
@@ -17,6 +18,7 @@ type MySQL struct {
 	dsn        string
 	client     *gorm.DB
 	disableLog bool
+	pooling    ConnectionPooling
 }
 
 var mysqlQueries = map[string]string{
@@ -63,6 +65,14 @@ func (p *MySQL) Connect() (DataSource, error) {
 		if err != nil {
 			return nil, err
 		}
+		clientDB, err := db1.DB()
+		if err != nil {
+			return nil, err
+		}
+		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
 		p.client = db1
 	}
 	return p, nil
@@ -149,6 +159,14 @@ func (p *MySQL) GetCollection(table string) ([]map[string]any, error) {
 		return nil, err
 	}
 	return rows, nil
+}
+
+func (p *MySQL) Close() error {
+	clientDB, err := p.client.DB()
+	if err != nil {
+		return err
+	}
+	return clientDB.Close()
 }
 
 func (p *MySQL) Exec(sql string, values ...any) error {
@@ -482,11 +500,12 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewMySQL(dsn, database string, disableLog bool) *MySQL {
+func NewMySQL(dsn, database string, disableLog bool, pooling ConnectionPooling) *MySQL {
 	return &MySQL{
 		schema:     database,
 		dsn:        dsn,
 		client:     nil,
 		disableLog: disableLog,
+		pooling:    pooling,
 	}
 }

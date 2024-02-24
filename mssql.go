@@ -3,6 +3,7 @@ package metadata
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/oarkflow/db"
 	"gorm.io/driver/sqlserver"
@@ -15,6 +16,7 @@ type MsSQL struct {
 	dsn        string
 	client     *gorm.DB
 	disableLog bool
+	pooling    ConnectionPooling
 }
 
 func (p *MsSQL) Connect() (DataSource, error) {
@@ -33,6 +35,14 @@ func (p *MsSQL) Connect() (DataSource, error) {
 		if err != nil {
 			return nil, err
 		}
+		clientDB, err := db1.DB()
+		if err != nil {
+			return nil, err
+		}
+		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
 		p.client = db1
 	}
 	return p, nil
@@ -50,6 +60,14 @@ func (p *MsSQL) LastInsertedID() (id any, err error) {
 func (p *MsSQL) MaxID(table, field string) (id any, err error) {
 	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
 	return
+}
+
+func (p *MsSQL) Close() error {
+	clientDB, err := p.client.DB()
+	if err != nil {
+		return err
+	}
+	return clientDB.Close()
 }
 
 func (p *MsSQL) GetSources() (tables []Source, err error) {
@@ -160,10 +178,11 @@ func (p *MsSQL) DB() (*sql.DB, error) {
 	return p.client.DB()
 }
 
-func NewMsSQL(dsn, database string, disableLog bool) *MsSQL {
+func NewMsSQL(dsn, database string, disableLog bool, pooling ConnectionPooling) *MsSQL {
 	return &MsSQL{
 		schema:     database,
 		dsn:        dsn,
 		disableLog: disableLog,
+		pooling:    pooling,
 	}
 }
