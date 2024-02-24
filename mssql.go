@@ -29,6 +29,7 @@ func (p *MsSQL) Connect() (DataSource, error) {
 			logLevel = logger.Error
 		}
 		config := &gorm.Config{
+			PrepareStmt:                              true,
 			DisableForeignKeyConstraintWhenMigrating: true,
 			Logger:                                   logger.Default.LogMode(logLevel),
 		}

@@ -82,6 +82,7 @@ func (p *Postgres) Connect() (DataSource, error) {
 			logLevel = logger.Error
 		}
 		config := &gorm.Config{
+			PrepareStmt:                              true,
 			Logger:                                   logger.Default.LogMode(logLevel),
 			DisableForeignKeyConstraintWhenMigrating: true,
 		}
