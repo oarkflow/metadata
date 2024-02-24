@@ -145,6 +145,10 @@ func (p *Http) GetType() string {
 	return "http"
 }
 
+func (p *Http) Config() Config {
+	panic("implement me")
+}
+
 func (p *Http) GetSingle(table string) (map[string]any, error) {
 	response, err := p.client.Handle(p.Payload)
 	if err != nil {

@@ -16,11 +16,11 @@ func main() {
 		Database: "clear20",
 	}
 	source := metadata.New(cfg)
-	_, err := source.Connect()
+	src, err := source.Connect()
 	if err != nil {
 		panic(err)
 	}
-	fields, err := source.GetFields("users")
+	fields, err := src.GetFields("users")
 	if err != nil {
 		panic(err)
 	}

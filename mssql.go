@@ -17,6 +17,7 @@ type MsSQL struct {
 	client     *gorm.DB
 	disableLog bool
 	pooling    ConnectionPooling
+	config     Config
 }
 
 func (p *MsSQL) Connect() (DataSource, error) {
@@ -50,6 +51,10 @@ func (p *MsSQL) Connect() (DataSource, error) {
 
 func (p *MsSQL) GetDBName() string {
 	return p.schema
+}
+
+func (p *MsSQL) Config() Config {
+	return p.config
 }
 
 func (p *MsSQL) LastInsertedID() (id any, err error) {

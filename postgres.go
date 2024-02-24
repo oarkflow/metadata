@@ -20,6 +20,7 @@ type Postgres struct {
 	client     *gorm.DB
 	disableLog bool
 	pooling    ConnectionPooling
+	config     Config
 }
 
 var postgresQueries = map[string]string{
@@ -129,6 +130,10 @@ func (p *Postgres) DB() (*sql.DB, error) {
 
 func (p *Postgres) GetDBName() string {
 	return p.schema
+}
+
+func (p *Postgres) Config() Config {
+	return p.config
 }
 
 func (p *Postgres) GetFields(table string) (fields []Field, err error) {

@@ -19,6 +19,7 @@ type MySQL struct {
 	client     *gorm.DB
 	disableLog bool
 	pooling    ConnectionPooling
+	config     Config
 }
 
 var mysqlQueries = map[string]string{
@@ -81,6 +82,10 @@ func (p *MySQL) Connect() (DataSource, error) {
 func (p *MySQL) GetSources() (tables []Source, err error) {
 	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_schema = ?", p.schema).Find(&tables).Error
 	return
+}
+
+func (p *MySQL) Config() Config {
+	return p.config
 }
 
 func (p *MySQL) GetDataTypeMap(dataType string) string {

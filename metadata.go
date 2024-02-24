@@ -203,6 +203,7 @@ type DB interface{}
 
 type DataSource interface {
 	DB() (*sql.DB, error)
+	Config() Config
 	GetDBName() string
 	GetSources() (tables []Source, err error)
 	GetDataTypeMap(dataType string) string
