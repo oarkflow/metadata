@@ -278,7 +278,9 @@ func New(config Config) DataSource {
 			config.Location = "Local"
 		}
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s", config.Username, config.Password, config.Host, config.Port, config.Database, config.Charset, true, config.Location)
-		return NewMySQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewMySQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con.config = config
+		return con
 	case "postgres", "psql", "postgresql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
@@ -293,13 +295,17 @@ func New(config Config) DataSource {
 			config.Timezone = "UTC"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s", config.Host, config.Username, config.Password, config.Database, config.Port, config.SslMode, config.Timezone)
-		return NewPostgres(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewPostgres(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con.config = config
+		return con
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}
 		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
-		return NewMsSQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewMsSQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con.config = config
+		return con
 	}
 	return nil
 }
