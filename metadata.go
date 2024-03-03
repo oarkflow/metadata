@@ -388,13 +388,16 @@ func CloneTable(srcCon, destCon DataSource, src, dest string) error {
 	if dest == "" {
 		dest = src
 	}
-	sql, err := destCon.GenerateSQL(dest, fields)
+	sq, err := destCon.GenerateSQL(dest, fields)
 	if err != nil {
 		return errors.NewE(err, fmt.Sprintf("Unable to get generate SQL for %s", dest), "CloneTable")
 	}
-	err = destCon.Exec(sql)
-	if err != nil {
-		return errors.NewE(err, fmt.Sprintf("Unable to clone table %s", dest), "CloneTable")
+	sqlParts := strings.Split(sq, ";")
+	for _, s := range sqlParts {
+		err = destCon.Exec(s)
+		if err != nil {
+			return errors.NewE(err, fmt.Sprintf("Unable to clone table %s", dest), "CloneTable")
+		}
 	}
 	return nil
 }

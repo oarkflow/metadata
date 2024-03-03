@@ -7,7 +7,7 @@ require (
 	github.com/oarkflow/db v0.0.1
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.5
-	github.com/oarkflow/pkg v0.1.26
+	github.com/oarkflow/pkg v0.1.27
 	github.com/oarkflow/protocol v0.0.15
 	gorm.io/driver/mysql v1.5.4
 	gorm.io/driver/postgres v1.5.6
@@ -29,12 +29,12 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.17.7 // indirect
 	github.com/microsoft/go-mssqldb v1.7.0 // indirect
-	github.com/oarkflow/frame v0.0.63 // indirect
+	github.com/oarkflow/frame v0.0.64 // indirect
 	github.com/oarkflow/log v1.0.74 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20240103092955-90b7d1423f92 // indirect
 	github.com/xhit/go-simple-mail/v2 v2.16.0 // indirect
-	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/crypto v0.20.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
