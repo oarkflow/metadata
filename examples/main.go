@@ -4,10 +4,11 @@ import (
 	"fmt"
 
 	"github.com/oarkflow/metadata"
+	v2 "github.com/oarkflow/metadata/v2"
 )
 
 func main() {
-	cfg := metadata.Config{
+	cfg := v2.Config{
 		Host:     "localhost",
 		Port:     5432,
 		Driver:   "postgresql",
@@ -15,7 +16,7 @@ func main() {
 		Password: "postgres",
 		Database: "clear20",
 	}
-	source := metadata.New(cfg)
+	source := v2.New(cfg)
 	src, err := source.Connect()
 	if err != nil {
 		panic(err)
@@ -24,8 +25,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	schema := metadata.AsJsonSchema(fields, false, "users")
-	fmt.Println(schema.String())
+	fmt.Println(fields)
+	fmt.Println(src.GetRawCollection("SELECT * FROM users"))
 }
 
 func migrationTest() {
