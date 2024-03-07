@@ -1,57 +1,59 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/oarkflow/metadata"
 	v2 "github.com/oarkflow/metadata/v2"
 )
 
-func main() {
+type Person struct {
+	FirstName string
+	LastName  string
+	Email     string
+}
+
+func mai1n() {
 	cfg := v2.Config{
 		Host:     "localhost",
 		Port:     5432,
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "clear20",
+		Database: "sujit",
 	}
 	source := v2.New(cfg)
 	src, err := source.Connect()
 	if err != nil {
 		panic(err)
 	}
-	fields, err := src.GetFields("users")
+	personStructs := []Person{
+		{FirstName: "Ardie", LastName: "Savea", Email: "asavea@ab.co.nz"},
+		{FirstName: "Sonny Bill", LastName: "Williams", Email: "sbw@ab.co.nz"},
+		{FirstName: "Ngani", LastName: "Laumape", Email: "nlaumape@ab.co.nz"},
+	}
+	err = src.Store("person", personStructs)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(fields)
-	fmt.Println(src.GetRawCollection("SELECT * FROM users"))
 }
 
-func migrationTest() {
+func main() {
 	source, destination := conn()
 
-	err := metadata.MigrateViews(source, destination)
+	err := metadata.MigrateTables(source, destination, "users")
 	if err != nil {
 		panic(err)
 	}
-
-	/*err := metadata.CloneTable(source, destination, "tbl_patient_event", "")
-	if err != nil {
-		panic(err)
-	}*/
 
 }
 
 func conn() (src, dst metadata.DataSource) {
 	cfg1 := metadata.Config{
 		Host:     "localhost",
-		Port:     3307,
+		Port:     3306,
 		Driver:   "mysql",
 		Username: "root",
-		Password: "root",
-		Database: "cleardb",
+		Password: "T#sT1234",
+		Database: "tests",
 	}
 	cfg := metadata.Config{
 		Host:     "localhost",
@@ -59,7 +61,7 @@ func conn() (src, dst metadata.DataSource) {
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "clear",
+		Database: "sujit",
 	}
 	src = metadata.New(cfg1)
 	dst = metadata.New(cfg)

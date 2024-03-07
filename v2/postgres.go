@@ -10,6 +10,7 @@ import (
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
 	"github.com/oarkflow/squealx/drivers/postgres"
+	"github.com/oarkflow/squealx/sqlbuilder"
 )
 
 type Postgres struct {
@@ -174,7 +175,7 @@ WHERE table_catalog = :catalog AND table_schema = 'public' AND c.table_name =  :
 }
 
 func (p *Postgres) Store(table string, val any) error {
-	_, err := p.client.Exec(InsertQuery(table, val), val)
+	_, err := p.client.Exec(sqlbuilder.InsertQuery(table, val), val)
 	return err
 }
 

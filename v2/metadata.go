@@ -14,7 +14,7 @@ import (
 	"github.com/oarkflow/pkg/str"
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
-	"github.com/oarkflow/squealx/utils/xstrings"
+	"github.com/oarkflow/squealx/sqlbuilder"
 )
 
 var builtInFunctions = []string{
@@ -452,44 +452,6 @@ func contains[T comparable](s []T, v T) bool {
 	return false
 }
 
-func InsertQuery(table string, data any) string {
-	fields := Fields(data)
-	return fmt.Sprintf("INSERT INTO %s(%s) VALUES (:%s)", table, strings.Join(fields, ", "), strings.Join(fields, ", :"))
-}
-
-func Fields(input any) []string {
-	var result []string
-
-	switch reflect.TypeOf(input).Kind() {
-	case reflect.Slice:
-		s := reflect.ValueOf(input)
-		for i := 0; i < s.Len(); i++ {
-			elem := s.Index(i)
-			if elem.IsValid() {
-				result = append(result, Fields(elem.Interface())...)
-			}
-		}
-	case reflect.Map:
-		s := reflect.ValueOf(input)
-		for _, key := range s.MapKeys() {
-			result = append(result, key.Interface().(string))
-		}
-	case reflect.Struct:
-		value := reflect.ValueOf(input)
-		valueType := reflect.TypeOf(input)
-		for i := 0; i < value.NumField(); i++ {
-			tag := valueType.Field(i).Tag.Get("db")
-			if tag != "" {
-				result = append(result, tag)
-			} else {
-				result = append(result, xstrings.ToSnakeCase(valueType.Field(i).Name))
-			}
-		}
-	}
-
-	return result
-}
-
 func processBatchInsert(client dbresolver.DBResolver, table string, val any, size int) error {
 	if size <= 0 {
 		size = 100
@@ -508,34 +470,13 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 			end = length
 		}
 		batchData := batch(sliceValue.Slice(i, end))
-		_, err := client.Exec(InsertQuery(table, batchData), batchData)
+		_, err := client.Exec(sqlbuilder.InsertQuery(table, batchData), batchData)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func groupByBatch(input any, batchSize int) [][]any {
-	sliceType := reflect.TypeOf(input)
-	if sliceType.Kind() != reflect.Slice {
-		return nil
-	}
-
-	sliceValue := reflect.ValueOf(input)
-	length := sliceValue.Len()
-
-	var batches [][]any
-	for i := 0; i < length; i += batchSize {
-		end := i + batchSize
-		if end > length {
-			end = length
-		}
-		batches = append(batches, batch(sliceValue.Slice(i, end)))
-	}
-
-	return batches
 }
 
 func batch(slice reflect.Value) []any {
