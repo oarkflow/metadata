@@ -9,7 +9,7 @@ require (
 	github.com/oarkflow/json v0.0.5
 	github.com/oarkflow/pkg v0.1.27
 	github.com/oarkflow/protocol v0.0.15
-	github.com/oarkflow/squealx v0.0.5
+	github.com/oarkflow/squealx v0.0.6
 	gorm.io/driver/mysql v1.5.4
 	gorm.io/driver/postgres v1.5.6
 	gorm.io/driver/sqlserver v1.5.3

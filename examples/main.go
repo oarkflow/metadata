@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/oarkflow/metadata"
+	"fmt"
+
 	v2 "github.com/oarkflow/metadata/v2"
 )
 
@@ -37,17 +38,26 @@ func mai1n() {
 }
 
 func main() {
-	source, destination := conn()
-
-	err := metadata.MigrateTables(source, destination, "users")
+	source, _ := conn()
+	dest, err := source.Connect()
 	if err != nil {
 		panic(err)
 	}
-
+	rows, err := dest.GetRawCollection("SELECT * FROM users LIMIT 10")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(rows)
+	/*
+		err := metadata.MigrateTables(source, destination, "users")
+		if err != nil {
+			panic(err)
+		}
+	*/
 }
 
-func conn() (src, dst metadata.DataSource) {
-	cfg1 := metadata.Config{
+func conn() (src, dst v2.DataSource) {
+	cfg1 := v2.Config{
 		Host:     "localhost",
 		Port:     3306,
 		Driver:   "mysql",
@@ -55,7 +65,7 @@ func conn() (src, dst metadata.DataSource) {
 		Password: "T#sT1234",
 		Database: "tests",
 	}
-	cfg := metadata.Config{
+	cfg := v2.Config{
 		Host:     "localhost",
 		Port:     5432,
 		Driver:   "postgresql",
@@ -63,7 +73,7 @@ func conn() (src, dst metadata.DataSource) {
 		Password: "postgres",
 		Database: "sujit",
 	}
-	src = metadata.New(cfg1)
-	dst = metadata.New(cfg)
+	src = v2.New(cfg1)
+	dst = v2.New(cfg)
 	return
 }
