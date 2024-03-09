@@ -9,7 +9,7 @@ import (
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
 	"github.com/oarkflow/squealx/drivers/mysql"
-	"github.com/oarkflow/squealx/sqlbuilder"
+	"github.com/oarkflow/squealx/orm"
 )
 
 type MySQL struct {
@@ -104,7 +104,7 @@ func (p *MySQL) GetDBName() string {
 }
 
 func (p *MySQL) Store(table string, val any) error {
-	_, err := p.client.Exec(sqlbuilder.InsertQuery(table, val), val)
+	_, err := p.client.Exec(orm.InsertQuery(table, val), val)
 	return err
 }
 

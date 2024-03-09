@@ -14,7 +14,7 @@ import (
 	"github.com/oarkflow/pkg/str"
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
-	"github.com/oarkflow/squealx/sqlbuilder"
+	"github.com/oarkflow/squealx/orm"
 )
 
 var builtInFunctions = []string{
@@ -470,7 +470,7 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 			end = length
 		}
 		batchData := batch(sliceValue.Slice(i, end))
-		_, err := client.Exec(sqlbuilder.InsertQuery(table, batchData), batchData)
+		_, err := client.Exec(orm.InsertQuery(table, batchData), batchData)
 		if err != nil {
 			return err
 		}

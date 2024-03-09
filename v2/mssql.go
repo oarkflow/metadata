@@ -7,7 +7,7 @@ import (
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
 	"github.com/oarkflow/squealx/drivers/mssql"
-	"github.com/oarkflow/squealx/sqlbuilder"
+	"github.com/oarkflow/squealx/orm"
 )
 
 type MsSQL struct {
@@ -139,7 +139,7 @@ func (p *MsSQL) Migrate(table string, dst DataSource) error {
 }
 
 func (p *MsSQL) Store(table string, val any) error {
-	_, err := p.client.Exec(sqlbuilder.InsertQuery(table, val), val)
+	_, err := p.client.Exec(orm.InsertQuery(table, val), val)
 	return err
 }
 
