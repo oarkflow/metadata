@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 
-	v2 "github.com/oarkflow/metadata/v2"
+	"github.com/oarkflow/squealx"
+
+	"github.com/oarkflow/metadata"
 )
 
 type Person struct {
@@ -13,15 +16,15 @@ type Person struct {
 }
 
 func mai1n() {
-	cfg := v2.Config{
+	cfg := metadata.Config{
 		Host:     "localhost",
 		Port:     5432,
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "sujit",
+		Database: "clear20",
 	}
-	source := v2.New(cfg)
+	source := metadata.New(cfg)
 	src, err := source.Connect()
 	if err != nil {
 		panic(err)
@@ -38,26 +41,43 @@ func mai1n() {
 }
 
 func main() {
-	source, _ := conn()
-	dest, err := source.Connect()
+	_, source := conn()
+	src, err := source.Connect()
 	if err != nil {
 		panic(err)
 	}
-	rows, err := dest.GetRawCollection("SELECT * FROM users LIMIT 10")
-	if err != nil {
-		panic(err)
+	last := false
+	paging := &squealx.Paging{
+		Limit: 1,
+		Page:  1,
 	}
-	fmt.Println(rows)
-	/*
-		err := metadata.MigrateTables(source, destination, "users")
-		if err != nil {
-			panic(err)
+	f, _ := src.GetRawCollection("SELeCT * FROM accounts")
+	fmt.Println(len(f))
+	for !last {
+		resp := src.GetRawPaginatedCollection("SELECT * FROM accounts", *paging)
+		if resp.Error != nil {
+			panic(resp.Error)
 		}
-	*/
+		fromDB := resp.Items
+		switch fromDB := fromDB.(type) {
+		case *[]map[string]any:
+			if fromDB == nil || len(*fromDB) == 0 {
+				last = true
+			}
+		case []map[string]any:
+			if fromDB == nil || len(fromDB) == 0 {
+				last = true
+			}
+		}
+		runtime.GC()
+		fmt.Println(paging, fromDB)
+		paging.Page++
+	}
+	fmt.Println(paging)
 }
 
-func conn() (src, dst v2.DataSource) {
-	cfg1 := v2.Config{
+func conn() (src, dst metadata.DataSource) {
+	cfg1 := metadata.Config{
 		Host:     "localhost",
 		Port:     3306,
 		Driver:   "mysql",
@@ -65,15 +85,15 @@ func conn() (src, dst v2.DataSource) {
 		Password: "T#sT1234",
 		Database: "tests",
 	}
-	cfg := v2.Config{
+	cfg := metadata.Config{
 		Host:     "localhost",
 		Port:     5432,
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "sujit",
+		Database: "clear20",
 	}
-	src = v2.New(cfg1)
-	dst = v2.New(cfg)
+	src = metadata.New(cfg1)
+	dst = metadata.New(cfg)
 	return
 }
