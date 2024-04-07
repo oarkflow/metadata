@@ -9,10 +9,10 @@ import (
 	stdHttp "net/http"
 	"strings"
 
-	"github.com/oarkflow/db"
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/protocol"
 	"github.com/oarkflow/protocol/http"
+	"github.com/oarkflow/squealx"
 )
 
 type Http struct {
@@ -39,8 +39,12 @@ func (p *Http) Close() error {
 	return nil
 }
 
-func (p *Http) Begin() DataSource {
-	return nil
+func (p *Http) Client() any {
+	return p.client
+}
+
+func (p *Http) Begin() (squealx.SQLTx, error) {
+	return nil, nil
 }
 
 func (p *Http) Error() error {
@@ -131,12 +135,12 @@ func (p *Http) GetRawCollection(query string, params ...map[string]any) ([]map[s
 	panic("implement me")
 }
 
-func (p *Http) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+func (p *Http) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p *Http) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
+func (p *Http) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }

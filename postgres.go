@@ -1,23 +1,22 @@
 package metadata
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 
-	"github.com/oarkflow/db"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/oarkflow/squealx"
+	"github.com/oarkflow/squealx/dbresolver"
+	"github.com/oarkflow/squealx/drivers/postgres"
+	"github.com/oarkflow/squealx/orm"
 )
 
 type Postgres struct {
 	schema     string
 	dsn        string
-	client     *gorm.DB
+	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
 	config     Config
@@ -75,36 +74,28 @@ var postgresDataTypes = map[string]string{
 
 func (p *Postgres) Connect() (DataSource, error) {
 	if p.client == nil {
-		var logLevel logger.LogLevel
-		if p.disableLog {
-			logLevel = logger.Silent
-		} else {
-			logLevel = logger.Error
-		}
-		config := &gorm.Config{
-			PrepareStmt:                              true,
-			Logger:                                   logger.Default.LogMode(logLevel),
-			DisableForeignKeyConstraintWhenMigrating: true,
-		}
-		db1, err := gorm.Open(postgres.Open(p.dsn), config)
+		db1, err := postgres.Open(p.dsn)
 		if err != nil {
 			return nil, err
 		}
-		clientDB, err := db1.DB()
-		if err != nil {
-			return nil, err
+		db1.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		db1.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		db1.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		db1.SetMaxIdleConns(p.pooling.MaxIdleCons)
+		primaryDBsCfg := &dbresolver.MasterConfig{
+			DBs:             []*squealx.DB{db1},
+			ReadWritePolicy: dbresolver.ReadWrite,
 		}
-		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
-		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
-		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
-		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
-		p.client = db1
+		p.client = dbresolver.MustNewDBResolver(primaryDBsCfg)
 	}
 	return p, nil
 }
 
 func (p *Postgres) GetSources() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_catalog = ? AND table_schema = 'public'", p.schema).Find(&tables).Error
+	sq := "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_catalog = :catalog AND table_schema = 'public'"
+	err = p.client.Select(&tables, sq, map[string]any{
+		"catalog": p.schema,
+	})
 	return
 }
 
@@ -116,17 +107,23 @@ func (p *Postgres) GetDataTypeMap(dataType string) string {
 }
 
 func (p *Postgres) GetTables() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_catalog = ? AND table_schema = 'public' AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
+	sq := "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_catalog = :catalog AND table_schema = 'public' AND table_type='BASE TABLE'"
+	err = p.client.Select(&tables, sq, map[string]any{
+		"catalog": p.schema,
+	})
 	return
 }
 
 func (p *Postgres) GetViews() (tables []Source, err error) {
-	err = p.client.Table("information_schema.views").Select("table_name as name, view_definition").Where("table_catalog = ? AND table_schema = 'public' AND table_type='VIEW'", p.schema).Find(&tables).Error
+	sq := "SELECT table_name as name, view_definition FROM information_schema.views WHERE table_catalog = :catalog AND table_schema = 'public' AND table_type='VIEW'"
+	err = p.client.Select(&tables, sq, map[string]any{
+		"catalog": p.schema,
+	})
 	return
 }
 
-func (p *Postgres) DB() (*sql.DB, error) {
-	return p.client.DB()
+func (p *Postgres) Client() any {
+	return p.client
 }
 
 func (p *Postgres) GetDBName() string {
@@ -139,13 +136,13 @@ func (p *Postgres) Config() Config {
 
 func (p *Postgres) GetFields(table string) (fields []Field, err error) {
 	var fieldMaps []map[string]any
-	err = p.client.Raw(`
+	err = p.client.Select(&fieldMaps, `
 SELECT c.column_name as "name", column_default as "default", is_nullable as "is_nullable", data_type as "type", CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as "length", numeric_scale as "precision",a.column_key as "key", b.comment, '' as extra
 FROM INFORMATION_SCHEMA.COLUMNS c
 LEFT JOIN (
 select kcu.table_name,        'PRI' as column_key,        kcu.ordinal_position as position,        kcu.column_name as column_name
 from information_schema.table_constraints tco
-join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name where tco.constraint_type = 'PRIMARY KEY' and kcu.table_catalog = ? AND kcu.table_schema = 'public' AND kcu.table_name = ? order by kcu.table_schema,          kcu.table_name,          position          ) a
+join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name where tco.constraint_type = 'PRIMARY KEY' and kcu.table_catalog = :catalog AND kcu.table_schema = 'public' AND kcu.table_name = :table_name order by kcu.table_schema,          kcu.table_name,          position          ) a
 ON c.table_name = a.table_name AND a.column_name = c.column_name
 LEFT JOIN (
 select
@@ -163,10 +160,13 @@ inner join information_schema.columns c on (
     c.table_schema = st.schemaname and
     c.table_name   = st.relname
 )
-WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name =  ?
+WHERE table_catalog = :catalog AND table_schema = 'public' AND c.table_name =  :table_name
 ) b ON c.table_name = b.table_name AND b.column_name = c.column_name
-          WHERE c.table_catalog = ? AND c.table_schema = 'public' AND c.table_name =  ?
-;`, p.schema, table, p.schema, table, p.schema, table).Scan(&fieldMaps).Error
+          WHERE c.table_catalog = :catalog AND c.table_schema = 'public' AND c.table_name =  :table_name
+;`, map[string]any{
+		"catalog":    p.schema,
+		"table_name": table,
+	})
 	if err != nil {
 		return
 	}
@@ -179,40 +179,44 @@ WHERE table_catalog = ? AND table_schema = 'public' AND c.table_name =  ?
 }
 
 func (p *Postgres) Store(table string, val any) error {
-	return p.client.Table(table).Create(val).Error
+	_, err := p.client.Exec(orm.InsertQuery(table, val), val)
+	return err
 }
 
 func (p *Postgres) StoreInBatches(table string, val any, size int) error {
-	if size <= 0 {
-		size = 100
-	}
-	return p.client.Table(table).CreateInBatches(val, size).Error
+	return processBatchInsert(p.client, table, val, size)
 }
 
 func (p *Postgres) LastInsertedID() (id any, err error) {
-	err = p.client.Raw("SELECT LASTVAL();").Scan(&id).Error
+	err = p.client.Select(&id, "SELECT LASTVAL();")
 	return
 }
 
 func (p *Postgres) MaxID(table, field string) (id any, err error) {
-	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	err = p.client.Select(&id, fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table))
 	return
 }
 
 func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error) {
-	err = p.client.Raw(`select kcu.column_name as "name", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = ? AND kcu.table_schema = 'public' AND kcu.table_name = ? order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, p.schema, table).Scan(&fields).Error
+	err = p.client.Select(&fields, `select kcu.column_name as "name", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = :catalog AND kcu.table_schema = 'public' AND kcu.table_name = :table_name order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, map[string]any{
+		"catalog":    p.schema,
+		"table_name": table,
+	})
 	return
 }
 
 func (p *Postgres) GetIndices(table string) (fields []Index, err error) {
-	err = p.client.Raw(`select DISTINCT kcu.constraint_name as "name", kcu.column_name as "column_name", enforced as "nullable" from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name      WHERE tco.table_catalog = ? AND tco.table_schema = 'public' AND tco.table_name = ?;`, p.schema, table).Scan(&fields).Error
+	err = p.client.Select(&fields, `select DISTINCT kcu.constraint_name as "name", kcu.column_name as "column_name", enforced as "nullable" from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name      WHERE tco.table_catalog = :catalog AND tco.table_schema = 'public' AND tco.table_name = :table_name;`, map[string]any{
+		"catalog":    p.schema,
+		"table_name": table,
+	})
 	return
 }
 
 // GetTheIndices gets the indices for a table other than the primary key.
 // This has only been implemented for postgres.
 func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
-	err = p.client.Raw(`
+	err = p.client.Select(&incides, `
 SELECT
 	i.relname AS name,
 	array_agg(a.attname) AS columns,
@@ -230,28 +234,29 @@ WHERE
 	AND t.relkind = 'r' -- ordinary table
 	-- AND ix.indisunique -- is unique
 	AND NOT ix.indisprimary -- is not primary
-	AND t.relname = ? -- name of table 
+	AND t.relname = :table_name -- name of table
 GROUP BY
 	i.relname,
 	ix.indisunique
 ORDER BY
-	i.relname;`, table).Scan(&incides).Error
+	i.relname;`, map[string]any{
+		"table_name": table,
+	})
 	return
 }
 
 func (p *Postgres) GetCollection(table string) ([]map[string]any, error) {
 	var rows []map[string]any
-	if err := p.client.Table(table).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
+	err := p.client.Select(&rows, "SELECT * FROM "+table)
+	return rows, err
 }
 
 func (p *Postgres) Exec(sql string, values ...any) error {
 	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, "`", `"`)
 	sql = strings.ReplaceAll(sql, `"/"`, `'/'`)
-	return p.client.Exec(sql, values...).Error
+	_, err := p.client.Exec(sql, values...)
+	return err
 }
 
 func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
@@ -265,35 +270,34 @@ func (p *Postgres) GetRawCollection(query string, params ...map[string]any) ([]m
 			}
 		}
 		if len(param) > 0 {
-			if err := p.client.Raw(query, param).Find(&rows).Error; err != nil {
+			if err := p.client.Select(&rows, query, param); err != nil {
 				return nil, err
 			}
 		} else {
-			if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+			if err := p.client.Select(&rows, query); err != nil {
 				return nil, err
 			}
 		}
-	} else if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+	} else if err := p.client.Select(&rows, query); err != nil {
 		return nil, err
 	}
 
 	return rows, nil
 }
 
-func (p *Postgres) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+func (p *Postgres) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
 	var rows []map[string]any
-	paging.Raw = true
-	return db.PaginateRaw(p.client, query, &rows, paging, params...)
+	return p.client.Paginate(query, &rows, paging, params...)
 }
 
-func (p *Postgres) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
+func (p *Postgres) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
 	var rows []map[string]any
-	return db.Paginate(p.client.Table(table), &rows, paging)
+	return p.client.Paginate("SELECT * FROM "+table, &rows, paging)
 }
 
 func (p *Postgres) GetSingle(table string) (map[string]any, error) {
 	var row map[string]any
-	if err := p.client.Table(table).Limit(1).Find(&row).Error; err != nil {
+	if err := p.client.Select(&row, fmt.Sprintf("SELECT * FROM %s LIMIT 1", table)); err != nil {
 		return nil, err
 	}
 	return row, nil
@@ -564,26 +568,12 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	return nil
 }
 
-func (p *Postgres) Error() error {
-	return p.client.Error
-}
-
 func (p *Postgres) Close() error {
-	clientDB, err := p.client.DB()
-	if err != nil {
-		return err
-	}
-	return clientDB.Close()
+	return p.client.Close()
 }
 
-func (p *Postgres) Begin() DataSource {
-	tx := p.client.Begin()
-	return NewFromClient(tx)
-}
-
-func (p *Postgres) Commit() DataSource {
-	tx := p.client.Commit()
-	return NewFromClient(tx)
+func (p *Postgres) Begin() (squealx.SQLTx, error) {
+	return p.client.Begin()
 }
 
 func (p *Postgres) FieldAsString(f Field, action string) string {

@@ -1,22 +1,21 @@
 package metadata
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/oarkflow/db"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/oarkflow/squealx"
+	"github.com/oarkflow/squealx/dbresolver"
+	"github.com/oarkflow/squealx/drivers/mysql"
+	"github.com/oarkflow/squealx/orm"
 )
 
 type MySQL struct {
 	schema     string
 	dsn        string
-	client     *gorm.DB
+	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
 	config     Config
@@ -51,37 +50,27 @@ var mysqlDataTypes = map[string]string{
 
 func (p *MySQL) Connect() (DataSource, error) {
 	if p.client == nil {
-
-		var logLevel logger.LogLevel
-		if p.disableLog {
-			logLevel = logger.Silent
-		} else {
-			logLevel = logger.Error
-		}
-		config := &gorm.Config{
-			PrepareStmt:                              true,
-			DisableForeignKeyConstraintWhenMigrating: true,
-			Logger:                                   logger.Default.LogMode(logLevel),
-		}
-		db1, err := gorm.Open(mysql.Open(p.dsn), config)
+		db1, err := mysql.Open(p.dsn)
 		if err != nil {
 			return nil, err
 		}
-		clientDB, err := db1.DB()
-		if err != nil {
-			return nil, err
+		db1.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		db1.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		db1.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		db1.SetMaxIdleConns(p.pooling.MaxIdleCons)
+		primaryDBsCfg := &dbresolver.MasterConfig{
+			DBs:             []*squealx.DB{db1},
+			ReadWritePolicy: dbresolver.ReadWrite,
 		}
-		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
-		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
-		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
-		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
-		p.client = db1
+		p.client = dbresolver.MustNewDBResolver(primaryDBsCfg)
 	}
 	return p, nil
 }
 
 func (p *MySQL) GetSources() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_schema = ?", p.schema).Find(&tables).Error
+	err = p.client.Select(&tables, "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_schema = :schema", map[string]any{
+		"schema": p.schema,
+	})
 	return
 }
 
@@ -97,17 +86,21 @@ func (p *MySQL) GetDataTypeMap(dataType string) string {
 }
 
 func (p *MySQL) GetTables() (tables []Source, err error) {
-	err = p.client.Table("information_schema.tables").Select("table_name as name, table_type").Where("table_schema = ? AND table_type='BASE TABLE'", p.schema).Find(&tables).Error
+	err = p.client.Select(&tables, "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_schema = :schema AND table_type='BASE TABLE'", map[string]any{
+		"schema": p.schema,
+	})
 	return
 }
 
 func (p *MySQL) GetViews() (tables []Source, err error) {
-	err = p.client.Table("information_schema.views").Select("table_name as name, view_definition").Where("table_schema = ?", p.schema).Find(&tables).Error
+	err = p.client.Select(&tables, "SELECT table_name as name, view_definition FROM information_schema.views WHERE table_schema = :schema", map[string]any{
+		"schema": p.schema,
+	})
 	return
 }
 
-func (p *MySQL) DB() (*sql.DB, error) {
-	return p.client.DB()
+func (p *MySQL) Client() any {
+	return p.client
 }
 
 func (p *MySQL) GetDBName() string {
@@ -115,19 +108,20 @@ func (p *MySQL) GetDBName() string {
 }
 
 func (p *MySQL) Store(table string, val any) error {
-	return p.client.Table(table).Create(val).Error
+	_, err := p.client.Exec(orm.InsertQuery(table, val), val)
+	return err
 }
 
 func (p *MySQL) StoreInBatches(table string, val any, size int) error {
-	if size <= 0 {
-		size = 100
-	}
-	return p.client.Table(table).CreateInBatches(val, size).Error
+	return processBatchInsert(p.client, table, val, size)
 }
 
 func (p *MySQL) GetFields(table string) (fields []Field, err error) {
 	var fieldMaps []map[string]any
-	err = p.client.Raw("SELECT column_name as `name`, column_default as `default`, is_nullable as `is_nullable`, data_type as type, CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as `length`, numeric_scale as `precision`, column_comment as `comment`, column_key as `key`, extra as extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME =  ? AND TABLE_SCHEMA = ?;", table, p.schema).Scan(&fieldMaps).Error
+	err = p.client.Select(&fieldMaps, "SELECT column_name as `name`, column_default as `default`, is_nullable as `is_nullable`, data_type as type, CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as `length`, numeric_scale as `precision`, column_comment as `comment`, column_key as `key`, extra as extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME =  :table_name AND TABLE_SCHEMA = :schema;", map[string]any{
+		"schema":     p.schema,
+		"table_name": table,
+	})
 	if err != nil {
 		return
 	}
@@ -140,59 +134,50 @@ func (p *MySQL) GetFields(table string) (fields []Field, err error) {
 }
 
 func (p *MySQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
-	err = p.client.Raw("SELECT distinct cu.column_name as `name`, cu.referenced_table_name as `referenced_table`, cu.referenced_column_name as `referenced_column` FROM information_schema.key_column_usage cu INNER JOIN information_schema.referential_constraints rc ON rc.constraint_schema = cu.table_schema AND rc.table_name = cu.table_name AND rc.constraint_name = cu.constraint_name WHERE cu.table_name=? AND TABLE_SCHEMA=?;", table, p.schema).Scan(&fields).Error
+	err = p.client.Select(&fields, "SELECT distinct cu.column_name as `name`, cu.referenced_table_name as `referenced_table`, cu.referenced_column_name as `referenced_column` FROM information_schema.key_column_usage cu INNER JOIN information_schema.referential_constraints rc ON rc.constraint_schema = cu.table_schema AND rc.table_name = cu.table_name AND rc.constraint_name = cu.constraint_name WHERE cu.table_name=:table_name AND TABLE_SCHEMA=:schema;", map[string]any{
+		"schema":     p.schema,
+		"table_name": table,
+	})
 	return
 }
 
 func (p *MySQL) GetIndices(table string) (fields []Index, err error) {
-	err = p.client.Raw("SELECT DISTINCT s.index_name as name, s.column_name as column_name, s.nullable as `nullable` FROM INFORMATION_SCHEMA.STATISTICS s LEFT OUTER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS t ON t.TABLE_SCHEMA = s.TABLE_SCHEMA AND t.TABLE_NAME = s.TABLE_NAME AND s.INDEX_NAME = t.CONSTRAINT_NAME WHERE s.TABLE_NAME=? AND s.TABLE_SCHEMA = ?;", table, p.schema).Scan(&fields).Error
+	err = p.client.Select(&fields, "SELECT DISTINCT s.index_name as name, s.column_name as column_name, s.nullable as `nullable` FROM INFORMATION_SCHEMA.STATISTICS s LEFT OUTER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS t ON t.TABLE_SCHEMA = s.TABLE_SCHEMA AND t.TABLE_NAME = s.TABLE_NAME AND s.INDEX_NAME = t.CONSTRAINT_NAME WHERE s.TABLE_NAME=:table_name AND s.TABLE_SCHEMA = :schema;", map[string]any{
+		"schema":     p.schema,
+		"table_name": table,
+	})
 	return
 }
 
 func (p *MySQL) LastInsertedID() (id any, err error) {
-	err = p.client.Raw("SELECT LAST_INSERT_ID();").Scan(&id).Error
+	err = p.client.Select(&id, "SELECT LAST_INSERT_ID();")
 	return
 }
 
 func (p *MySQL) MaxID(table, field string) (id any, err error) {
-	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	err = p.client.Select(&id, fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table))
 	return
 }
 
 func (p *MySQL) GetCollection(table string) ([]map[string]any, error) {
 	var rows []map[string]any
-	if err := p.client.Table(table).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
+	err := p.client.Select(&rows, "SELECT * FROM "+table)
+	return rows, err
 }
 
 func (p *MySQL) Close() error {
-	clientDB, err := p.client.DB()
-	if err != nil {
-		return err
-	}
-	return clientDB.Close()
+	return p.client.Close()
 }
 
 func (p *MySQL) Exec(sql string, values ...any) error {
 	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, `"`, "`")
-	return p.client.Exec(sql, values...).Error
+	_, err := p.client.Exec(sql, values...)
+	return err
 }
 
-func (p *MySQL) Error() error {
-	return p.client.Error
-}
-
-func (p *MySQL) Begin() DataSource {
-	tx := p.client.Begin()
-	return NewFromClient(tx)
-}
-
-func (p *MySQL) Commit() DataSource {
-	tx := p.client.Commit()
-	return NewFromClient(tx)
+func (p *MySQL) Begin() (squealx.SQLTx, error) {
+	return p.client.Begin()
 }
 
 func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
@@ -206,35 +191,34 @@ func (p *MySQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 			}
 		}
 		if len(param) > 0 {
-			if err := p.client.Raw(query, param).Find(&rows).Error; err != nil {
+			if err := p.client.Select(&rows, query, param); err != nil {
 				return nil, err
 			}
 		} else {
-			if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+			if err := p.client.Select(&rows, query); err != nil {
 				return nil, err
 			}
 		}
-	} else if err := p.client.Raw(query).Find(&rows).Error; err != nil {
+	} else if err := p.client.Select(&rows, query); err != nil {
 		return nil, err
 	}
 
 	return rows, nil
 }
 
-func (p *MySQL) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+func (p *MySQL) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
 	var rows []map[string]any
-	paging.Raw = true
-	return db.PaginateRaw(p.client, query, &rows, paging, params...)
+	return p.client.Paginate(query, &rows, paging, params...)
 }
 
-func (p *MySQL) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
+func (p *MySQL) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
 	var rows []map[string]any
-	return db.Paginate(p.client.Table(table), &rows, paging)
+	return p.client.Paginate("SELECT * FROM "+table, &rows, paging)
 }
 
 func (p *MySQL) GetSingle(table string) (map[string]any, error) {
 	var row map[string]any
-	if err := p.client.Table(table).Limit(1).Find(&row).Error; err != nil {
+	if err := p.client.Select(&row, fmt.Sprintf("SELECT * FROM %s LIMIT 1", table)); err != nil {
 		return nil, err
 	}
 	return row, nil

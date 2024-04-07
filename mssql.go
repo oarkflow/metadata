@@ -1,20 +1,19 @@
 package metadata
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
-	"github.com/oarkflow/db"
-	"gorm.io/driver/sqlserver"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/oarkflow/squealx"
+	"github.com/oarkflow/squealx/dbresolver"
+	"github.com/oarkflow/squealx/drivers/mssql"
+	"github.com/oarkflow/squealx/orm"
 )
 
 type MsSQL struct {
 	schema     string
 	dsn        string
-	client     *gorm.DB
+	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
 	config     Config
@@ -22,30 +21,19 @@ type MsSQL struct {
 
 func (p *MsSQL) Connect() (DataSource, error) {
 	if p.client == nil {
-		var logLevel logger.LogLevel
-		if p.disableLog {
-			logLevel = logger.Silent
-		} else {
-			logLevel = logger.Error
-		}
-		config := &gorm.Config{
-			PrepareStmt:                              true,
-			DisableForeignKeyConstraintWhenMigrating: true,
-			Logger:                                   logger.Default.LogMode(logLevel),
-		}
-		db1, err := gorm.Open(sqlserver.Open(p.dsn), config)
+		db1, err := mssql.Open(p.dsn)
 		if err != nil {
 			return nil, err
 		}
-		clientDB, err := db1.DB()
-		if err != nil {
-			return nil, err
+		db1.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		db1.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		db1.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		db1.SetMaxIdleConns(p.pooling.MaxIdleCons)
+		primaryDBsCfg := &dbresolver.MasterConfig{
+			DBs:             []*squealx.DB{db1},
+			ReadWritePolicy: dbresolver.ReadWrite,
 		}
-		clientDB.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
-		clientDB.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
-		clientDB.SetMaxOpenConns(p.pooling.MaxOpenCons)
-		clientDB.SetMaxIdleConns(p.pooling.MaxIdleCons)
-		p.client = db1
+		p.client = dbresolver.MustNewDBResolver(primaryDBsCfg)
 	}
 	return p, nil
 }
@@ -59,21 +47,21 @@ func (p *MsSQL) Config() Config {
 }
 
 func (p *MsSQL) LastInsertedID() (id any, err error) {
-	err = p.client.Raw("SELECT SCOPE_IDENTITY();").Scan(&id).Error
+	err = p.client.Select(&id, "SELECT SCOPE_IDENTITY();")
 	return
 }
 
 func (p *MsSQL) MaxID(table, field string) (id any, err error) {
-	err = p.client.Raw(fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table)).Scan(&id).Error
+	err = p.client.Select(&id, fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table))
 	return
 }
 
 func (p *MsSQL) Close() error {
-	clientDB, err := p.client.DB()
-	if err != nil {
-		return err
-	}
-	return clientDB.Close()
+	return p.client.Close()
+}
+
+func (p *MsSQL) Client() any {
+	return p.client
 }
 
 func (p *MsSQL) GetSources() (tables []Source, err error) {
@@ -105,18 +93,8 @@ func (p *MsSQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
 	panic("implement me")
 }
 
-func (p *MsSQL) Begin() DataSource {
-	tx := p.client.Begin()
-	return NewFromClient(tx)
-}
-
-func (p *MsSQL) Error() error {
-	return p.client.Error
-}
-
-func (p *MsSQL) Commit() DataSource {
-	tx := p.client.Commit()
-	return NewFromClient(tx)
+func (p *MsSQL) Begin() (squealx.SQLTx, error) {
+	return p.client.Begin()
 }
 
 func (p *MsSQL) GetIndices(table string) (fields []Index, err error) {
@@ -139,12 +117,12 @@ func (p *MsSQL) GetRawCollection(query string, params ...map[string]any) ([]map[
 	panic("implement me")
 }
 
-func (p *MsSQL) GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse {
+func (p *MsSQL) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p *MsSQL) GetPaginated(table string, paging db.Paging) db.PaginatedResponse {
+func (p *MsSQL) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
 	// TODO implement me
 	panic("implement me")
 }
@@ -165,23 +143,17 @@ func (p *MsSQL) Migrate(table string, dst DataSource) error {
 }
 
 func (p *MsSQL) Store(table string, val any) error {
-	return p.client.Table(table).Create(val).Error
+	_, err := p.client.Exec(orm.InsertQuery(table, val), val)
+	return err
 }
 
 func (p *MsSQL) StoreInBatches(table string, val any, size int) error {
-	if size <= 0 {
-		size = 100
-	}
-	return p.client.Table(table).CreateInBatches(val, size).Error
+	return processBatchInsert(p.client, table, val, size)
 }
 
 func (p *MsSQL) GetType() string {
 	// TODO implement me
 	panic("implement me")
-}
-
-func (p *MsSQL) DB() (*sql.DB, error) {
-	return p.client.DB()
 }
 
 func NewMsSQL(dsn, database string, disableLog bool, pooling ConnectionPooling) *MsSQL {

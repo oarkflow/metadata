@@ -1,19 +1,20 @@
 package metadata
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	stdJson "encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
 	"github.com/lib/pq"
-	"github.com/oarkflow/db"
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
-	"gorm.io/gorm"
+	"github.com/oarkflow/squealx"
+	"github.com/oarkflow/squealx/dbresolver"
+	"github.com/oarkflow/squealx/orm"
 )
 
 var builtInFunctions = []string{
@@ -202,7 +203,6 @@ func (s *SourceFields) AsJsonSchema(additionalProperties bool) *Schema {
 type DB interface{}
 
 type DataSource interface {
-	DB() (*sql.DB, error)
 	Config() Config
 	GetDBName() string
 	GetSources() (tables []Source, err error)
@@ -211,19 +211,18 @@ type DataSource interface {
 	GetViews() ([]Source, error)
 	GetForeignKeys(table string) (fields []ForeignKey, err error)
 	GetIndices(table string) (fields []Index, err error)
-	Begin() DataSource
-	Commit() DataSource
-	Error() error
+	Begin() (squealx.SQLTx, error)
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
 	LastInsertedID() (id any, err error)
 	MaxID(table, field string) (id any, err error)
+	Client() any
 	Connect() (DataSource, error)
 	GetFields(table string) (fields []Field, err error)
 	GetCollection(table string) ([]map[string]any, error)
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
-	GetRawPaginatedCollection(query string, paging db.Paging, params ...map[string]any) db.PaginatedResponse
-	GetPaginated(table string, paging db.Paging) db.PaginatedResponse
+	GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse
+	GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse
 	GetSingle(table string) (map[string]any, error)
 	Migrate(table string, dst DataSource) error
 	GetType() string
@@ -232,8 +231,8 @@ type DataSource interface {
 	Close() error
 }
 
-func NewFromClient(client *gorm.DB) DataSource {
-	switch client.Dialector.Name() {
+func NewFromClient(client dbresolver.DBResolver) DataSource {
+	switch client.DriverName() {
 	case "mysql", "mariadb":
 		return &MySQL{client: client}
 	case "postgres", "psql", "postgresql":
@@ -452,4 +451,40 @@ func contains[T comparable](s []T, v T) bool {
 		}
 	}
 	return false
+}
+
+func processBatchInsert(client dbresolver.DBResolver, table string, val any, size int) error {
+	if size <= 0 {
+		size = 100
+	}
+	sliceType := reflect.TypeOf(val)
+	if sliceType.Kind() != reflect.Slice {
+		return nil
+	}
+
+	sliceValue := reflect.ValueOf(val)
+	length := sliceValue.Len()
+
+	for i := 0; i < length; i += size {
+		end := i + size
+		if end > length {
+			end = length
+		}
+		batchData := batch(sliceValue.Slice(i, end))
+		_, err := client.Exec(orm.InsertQuery(table, batchData), batchData)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func batch(slice reflect.Value) []any {
+	length := slice.Len()
+	batch := make([]any, length)
+	for i := 0; i < length; i++ {
+		batch[i] = slice.Index(i).Interface()
+	}
+	return batch
 }
