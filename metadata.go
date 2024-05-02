@@ -1,8 +1,6 @@
 package metadata
 
 import (
-	"database/sql/driver"
-	stdJson "encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -22,29 +20,6 @@ var builtInFunctions = []string{
 	"now()",
 	"true",
 	"false",
-}
-
-type Any stdJson.RawMessage
-
-// Scan scan value into Jsonb, implements sql.Scanner interface
-func (j *Any) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
-	}
-
-	result := stdJson.RawMessage{}
-	err := stdJson.Unmarshal(bytes, &result)
-	*j = Any(result)
-	return err
-}
-
-// Value return json value, implement driver.Valuer interface
-func (j Any) Value() (driver.Value, error) {
-	if len(j) == 0 {
-		return nil, nil
-	}
-	return stdJson.RawMessage(j).MarshalJSON()
 }
 
 type ConnectionPooling struct {

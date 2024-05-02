@@ -3,12 +3,11 @@ module github.com/oarkflow/metadata
 go 1.22.0
 
 require (
-	github.com/lib/pq v1.10.9
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.5
 	github.com/oarkflow/pkg v0.1.42
 	github.com/oarkflow/protocol v0.0.15
-	github.com/oarkflow/squealx v0.0.10
+	github.com/oarkflow/squealx v0.0.11
 )
 
 require (
