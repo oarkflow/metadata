@@ -8,11 +8,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/lib/pq"
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
 	"github.com/oarkflow/squealx"
+	"github.com/oarkflow/squealx/datatypes"
 	"github.com/oarkflow/squealx/dbresolver"
 	"github.com/oarkflow/squealx/orm"
 )
@@ -109,9 +109,9 @@ type Index struct {
 }
 
 type Indices struct {
-	Name    string         `json:"name" gorm:"column:name"`
-	Unique  bool           `json:"unique" gorm:"column:unique"`
-	Columns pq.StringArray `json:"columns" gorm:"type:text[] column:columns"`
+	Name    string                `json:"name" gorm:"column:name"`
+	Unique  bool                  `json:"unique" gorm:"column:unique"`
+	Columns datatypes.StringArray `json:"columns" gorm:"type:text[] column:columns"`
 }
 
 type SourceFields struct {

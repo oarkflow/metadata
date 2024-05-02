@@ -252,7 +252,6 @@ func (p *Postgres) GetCollection(table string) ([]map[string]any, error) {
 }
 
 func (p *Postgres) Exec(sql string, values ...any) error {
-	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, "`", `"`)
 	sql = strings.ReplaceAll(sql, `"/"`, `'/'`)
 	_, err := p.client.Exec(sql, values...)
@@ -338,7 +337,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 			f.DataType = "serial"
 		}
 	}
-	fieldName := strings.ToLower(f.Name)
+	fieldName := f.Name
 	switch f.DataType {
 	case "int", "integer", "smallint", "bigint", "int2", "int4", "int8":
 		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[f.DataType], fieldName, dataTypes[f.DataType])
@@ -397,7 +396,7 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 	var sql string
 	var query, comments, indexQuery, primaryKeys []string
 	for _, field := range newFields {
-		fieldName := strings.ToLower(field.Name)
+		fieldName := field.Name
 		if strings.ToUpper(field.Key) == "PRI" {
 			primaryKeys = append(primaryKeys, fieldName)
 		}
@@ -430,7 +429,11 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
 		sql = fmt.Sprintf(postgresQueries["create_table"], table) + " (" + fieldsToUpdate + ");"
+	}
+	if len(comments) > 0 {
 		sql += strings.Join(comments, "")
+	}
+	if len(indexQuery) > 0 {
 		sql += strings.Join(indexQuery, "")
 	}
 	return sql, nil
@@ -453,9 +456,9 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 		}
 		fieldExists := false
 		if newField.OldName == "" {
-			fieldName := strings.ToLower(newField.Name)
+			fieldName := newField.Name
 			for _, existingField := range existingFields {
-				if strings.ToLower(existingField.Name) == fieldName {
+				if existingField.Name == fieldName {
 					fieldExists = true
 					if postgresDataTypes[existingField.DataType] != postgresDataTypes[newField.DataType] ||
 						existingField.Length != newField.Length ||
@@ -487,7 +490,7 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 		}
 	}
 	for _, newField := range newFields {
-		fieldName := strings.ToLower(newField.Name)
+		fieldName := newField.Name
 		if newField.OldName != "" {
 			sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+fieldName+`";`)
 		}
@@ -625,7 +628,7 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			}
 		}
 	}
-	fieldName := strings.ToLower(f.Name)
+	fieldName := f.Name
 	switch f.DataType {
 	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {

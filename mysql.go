@@ -22,16 +22,19 @@ type MySQL struct {
 }
 
 var mysqlQueries = map[string]string{
-	"create_table":  "CREATE TABLE IF NOT EXISTS %s",
-	"alter_table":   "ALTER TABLE %s",
-	"column":        "%s %s",
-	"add_column":    "ADD COLUMN %s %s",    // {{length}} NOT NULL DEFAULT 1
-	"change_column": "MODIFY COLUMN %s %s", // {{length}} NOT NULL DEFAULT 1
-	"remove_column": "MODIFY COLUMN % %s",  // {{length}} NOT NULL DEFAULT 1
+	"create_table":        "CREATE TABLE IF NOT EXISTS %s",
+	"alter_table":         "ALTER TABLE %s",
+	"column":              "%s %s",
+	"add_column":          "ADD COLUMN %s %s",    // {{length}} NOT NULL DEFAULT 1
+	"change_column":       "MODIFY COLUMN %s %s", // {{length}} NOT NULL DEFAULT 1
+	"remove_column":       "MODIFY COLUMN % %s",  // {{length}} NOT NULL DEFAULT 1
+	"create_unique_index": "CREATE UNIQUE INDEX %s ON %s (%s);",
+	"create_index":        "CREATE INDEX %s ON %s (%s);",
 }
 
 var mysqlDataTypes = map[string]string{
 	"int":       "INTEGER",
+	"bigint":    "BIGINT",
 	"float":     "FLOAT",
 	"double":    "DOUBLE",
 	"decimal":   "DECIMAL",
@@ -149,6 +152,14 @@ func (p *MySQL) GetIndices(table string) (fields []Index, err error) {
 	return
 }
 
+func (p *MySQL) GetTheIndices(table string) (fields []Indices, err error) {
+	err = p.client.Select(&fields, `SELECT INDEX_NAME AS name, NON_UNIQUE as uniq, CONCAT('[', GROUP_CONCAT(CONCAT('"',COLUMN_NAME,'"') ORDER BY SEQ_IN_INDEX) ,']') AS columns FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table_name GROUP BY INDEX_NAME, NON_UNIQUE;`, map[string]any{
+		"schema":     p.schema,
+		"table_name": table,
+	})
+	return
+}
+
 func (p *MySQL) LastInsertedID() (id any, err error) {
 	err = p.client.Select(&id, "SELECT LAST_INSERT_ID();")
 	return
@@ -170,7 +181,6 @@ func (p *MySQL) Close() error {
 }
 
 func (p *MySQL) Exec(sql string, values ...any) error {
-	sql = strings.ToLower(sql)
 	sql = strings.ReplaceAll(sql, `"`, "`")
 	_, err := p.client.Exec(sql, values...)
 	return err
@@ -308,26 +318,52 @@ func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
 	return ""
 }
 
-func (p *MySQL) createSQL(table string, newFields []Field) (string, error) {
+func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql string
-	var query, primaryKeys []string
+	var query, indexQuery, primaryKeys []string
 	for _, newField := range newFields {
 		if strings.ToUpper(newField.Key) == "PRI" {
 			primaryKeys = append(primaryKeys, newField.Name)
 		}
 		query = append(query, p.FieldAsString(newField, "column"))
 	}
+	if len(indices) > 0 {
+		existingIndices, err := p.GetTheIndices(table)
+		if err != nil {
+			panic(err)
+			return "", err
+		}
+		fmt.Println(existingIndices)
+		for _, index := range indices {
+			if index.Name == "" {
+				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+			}
+			switch index.Unique {
+			case true:
+				query := fmt.Sprintf(mysqlQueries["create_unique_index"], index.Name, table,
+					strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, query)
+			case false:
+				query := fmt.Sprintf(mysqlQueries["create_index"], index.Name, table,
+					strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, query)
+			}
+		}
+	}
 	if len(primaryKeys) > 0 {
 		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
 	}
 	if len(query) > 0 {
 		fieldsToUpdate := strings.Join(query, ", ")
-		sql = fmt.Sprintf(mysqlQueries["create_table"], table) + " (" + fieldsToUpdate + ")"
+		sql = fmt.Sprintf(mysqlQueries["create_table"], table) + " (" + fieldsToUpdate + ");"
+	}
+	if len(indexQuery) > 0 {
+		sql += strings.Join(indexQuery, "")
 	}
 	return sql, nil
 }
 
-func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
+func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql []string
 	alterTable := "ALTER TABLE " + table
 	existingFields, err := p.GetFields(table)
@@ -340,17 +376,24 @@ func (p *MySQL) alterSQL(table string, newFields []Field) (string, error) {
 		}
 		fieldExists := false
 		if newField.OldName == "" {
+			fieldName := newField.Name
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
 					fieldExists = true
 					if mysqlDataTypes[existingField.DataType] != mysqlDataTypes[newField.DataType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default ||
-						existingField.Comment != newField.Comment ||
-						existingField.IsNullable != newField.IsNullable {
+						existingField.Comment != newField.Comment {
 						qry := p.alterFieldSQL(table, newField, existingField)
 						if qry != "" {
 							sql = append(sql, qry)
+						}
+					}
+					if existingField.IsNullable != newField.IsNullable {
+						if newField.IsNullable == "YES" {
+							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, fieldName))
+						} else {
+							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, fieldName))
 						}
 					}
 				}
@@ -399,9 +442,9 @@ func (p *MySQL) GenerateSQL(table string, newFields []Field, indices ...Indices)
 		}
 	}
 	if !sourceExists {
-		return p.createSQL(table, newFields)
+		return p.createSQL(table, newFields, indices...)
 	}
-	return p.alterSQL(table, newFields)
+	return p.alterSQL(table, newFields, indices...)
 }
 
 func (p *MySQL) Migrate(table string, dst DataSource) error {
@@ -420,7 +463,6 @@ func (p *MySQL) Migrate(table string, dst DataSource) error {
 func (p *MySQL) FieldAsString(f Field, action string) string {
 	sqlPattern := mysqlQueries
 	dataTypes := mysqlDataTypes
-
 	nullable := "NULL"
 	defaultVal := ""
 	comment := ""
@@ -432,7 +474,7 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	if f.Default != nil {
 		switch def := f.Default.(type) {
 		case string:
-			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+			if contains(builtInFunctions, strings.ToLower(def)) {
 				defaultVal = fmt.Sprintf("DEFAULT %s", def)
 			} else {
 				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
@@ -440,8 +482,6 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 		default:
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
-	} else {
-		defaultVal = "DEFAULT NULL"
 	}
 
 	if defaultVal == "DEFAULT '0000-00-00 00:00:00'" {
