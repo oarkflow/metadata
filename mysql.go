@@ -34,6 +34,7 @@ var mysqlQueries = map[string]string{
 
 var mysqlDataTypes = map[string]string{
 	"int":       "INTEGER",
+	"integer":   "INTEGER",
 	"bigint":    "BIGINT",
 	"float":     "FLOAT",
 	"double":    "DOUBLE",
@@ -282,7 +283,7 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 		defaultVal = "DEFAULT NULL"
 	}
 	switch f.DataType {
-	case "float", "double", "decimal", "numeric", "int", "integer":
+	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 11
 		}
@@ -293,6 +294,14 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
 		}
 		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+	case "int", "integer":
+		if f.Length == 0 {
+			f.Length = 11
+		}
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+		}
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
 	case "string", "varchar", "text", "character varying", "char":
 		if f.Length == 0 {
 			f.Length = 255

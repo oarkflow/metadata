@@ -17,8 +17,7 @@ var data = []byte(`
 			"key": "pri",
 			"type": "bigint",
 			"is_nullable": "NO",
-			"extra": "AUTO_INCREMENT",
-			"comment": "Auto-incremented identifier"
+			"extra": "AUTO_INCREMENT"
 		},
 		{
 			"name": "transactionId",
