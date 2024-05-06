@@ -91,7 +91,7 @@ func conn() (src, dst metadata.DataSource) {
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "clear20",
+		Database: "clear20_dev",
 	}
 	src = metadata.New(cfg1)
 	dst = metadata.New(cfg)

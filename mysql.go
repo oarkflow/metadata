@@ -15,6 +15,7 @@ import (
 type MySQL struct {
 	schema     string
 	dsn        string
+	id         string
 	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
@@ -54,7 +55,7 @@ var mysqlDataTypes = map[string]string{
 
 func (p *MySQL) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := mysql.Open(p.dsn)
+		db1, err := mysql.Open(p.dsn, p.id)
 		if err != nil {
 			return nil, err
 		}
@@ -539,10 +540,11 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewMySQL(dsn, database string, disableLog bool, pooling ConnectionPooling) *MySQL {
+func NewMySQL(id, dsn, database string, disableLog bool, pooling ConnectionPooling) *MySQL {
 	return &MySQL{
 		schema:     database,
 		dsn:        dsn,
+		id:         id,
 		client:     nil,
 		disableLog: disableLog,
 		pooling:    pooling,

@@ -9,6 +9,7 @@ import (
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
+	"github.com/oarkflow/protocol/utils/xid"
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/datatypes"
 	"github.com/oarkflow/squealx/dbresolver"
@@ -225,6 +226,9 @@ func New(config Config) DataSource {
 		MaxOpenCons: 100,
 		MaxIdleCons: 50,
 	}
+	if config.Name == "" {
+		config.Name = xid.New().String()
+	}
 	if config.MaxLifetime > 0 {
 		connectionPooling.MaxLifetime = config.MaxLifetime
 	}
@@ -252,7 +256,7 @@ func New(config Config) DataSource {
 			config.Location = "Local"
 		}
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s", config.Username, config.Password, config.Host, config.Port, config.Database, config.Charset, true, config.Location)
-		con := NewMySQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewMySQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
 	case "postgres", "psql", "postgresql":
@@ -269,7 +273,7 @@ func New(config Config) DataSource {
 			config.Timezone = "UTC"
 		}
 		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s", config.Host, config.Username, config.Password, config.Database, config.Port, config.SslMode, config.Timezone)
-		con := NewPostgres(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewPostgres(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
@@ -277,7 +281,7 @@ func New(config Config) DataSource {
 			config.Host = "0.0.0.0"
 		}
 		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
-		con := NewMsSQL(dsn, config.Database, config.DisableLogger, connectionPooling)
+		con := NewMsSQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
 	}

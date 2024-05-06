@@ -13,6 +13,7 @@ import (
 type MsSQL struct {
 	schema     string
 	dsn        string
+	id         string
 	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
@@ -21,7 +22,7 @@ type MsSQL struct {
 
 func (p *MsSQL) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := mssql.Open(p.dsn)
+		db1, err := mssql.Open(p.dsn, p.id)
 		if err != nil {
 			return nil, err
 		}
@@ -156,10 +157,11 @@ func (p *MsSQL) GetType() string {
 	panic("implement me")
 }
 
-func NewMsSQL(dsn, database string, disableLog bool, pooling ConnectionPooling) *MsSQL {
+func NewMsSQL(id, dsn, database string, disableLog bool, pooling ConnectionPooling) *MsSQL {
 	return &MsSQL{
 		schema:     database,
 		dsn:        dsn,
+		id:         id,
 		disableLog: disableLog,
 		pooling:    pooling,
 	}

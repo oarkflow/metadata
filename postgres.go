@@ -16,6 +16,7 @@ import (
 type Postgres struct {
 	schema     string
 	dsn        string
+	id         string
 	client     dbresolver.DBResolver
 	disableLog bool
 	pooling    ConnectionPooling
@@ -74,7 +75,7 @@ var postgresDataTypes = map[string]string{
 
 func (p *Postgres) Connect() (DataSource, error) {
 	if p.client == nil {
-		db1, err := postgres.Open(p.dsn)
+		db1, err := postgres.Open(p.dsn, p.id)
 		if err != nil {
 			return nil, err
 		}
@@ -654,9 +655,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	}
 }
 
-func NewPostgres(dsn, database string, disableLog bool, pooling ConnectionPooling) *Postgres {
+func NewPostgres(id, dsn, database string, disableLog bool, pooling ConnectionPooling) *Postgres {
 	return &Postgres{
 		schema:     database,
+		id:         id,
 		dsn:        dsn,
 		client:     nil,
 		disableLog: disableLog,
