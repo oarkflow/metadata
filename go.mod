@@ -7,7 +7,7 @@ require (
 	github.com/oarkflow/json v0.0.5
 	github.com/oarkflow/pkg v0.1.42
 	github.com/oarkflow/protocol v0.0.15
-	github.com/oarkflow/squealx v0.0.12
+	github.com/oarkflow/squealx v0.0.13
 )
 
 require (
@@ -28,7 +28,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20240103092955-90b7d1423f92 // indirect
 	github.com/xhit/go-simple-mail/v2 v2.16.0 // indirect
-	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
