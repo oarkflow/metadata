@@ -59,15 +59,14 @@ func (p *MySQL) Connect() (DataSource, error) {
 		if err != nil {
 			return nil, err
 		}
-		db1.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
-		db1.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
-		db1.SetMaxOpenConns(p.pooling.MaxOpenCons)
-		db1.SetMaxIdleConns(p.pooling.MaxIdleCons)
-		primaryDBsCfg := &dbresolver.MasterConfig{
-			DBs:             []*squealx.DB{db1},
-			ReadWritePolicy: dbresolver.ReadWrite,
+		p.client, err = dbresolver.New(dbresolver.WithMasterDBs(db1), dbresolver.WithReadWritePolicy(dbresolver.ReadWrite))
+		if err != nil {
+			return nil, err
 		}
-		p.client = dbresolver.MustNewDBResolver(primaryDBsCfg)
+		p.client.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		p.client.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		p.client.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		p.client.SetMaxIdleConns(p.pooling.MaxIdleCons)
 	}
 	return p, nil
 }
