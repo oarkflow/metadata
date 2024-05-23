@@ -219,7 +219,7 @@ func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
 	err = p.client.Select(&incides, `
 SELECT
 	i.relname AS name,
-	array_agg(a.attname) AS columns,
+	json_agg(a.attname) AS columns,
 	ix.indisunique AS unique
 FROM
 	pg_class t,
@@ -231,10 +231,9 @@ WHERE
 	AND i.oid = ix.indexrelid
 	AND a.attrelid = t.oid
 	AND a.attnum = ANY (ix.indkey)
-	AND t.relkind = 'r' -- ordinary table
-	-- AND ix.indisunique -- is unique
-	AND NOT ix.indisprimary -- is not primary
-	AND t.relname = :table_name -- name of table
+	AND t.relkind = 'r'
+	AND NOT ix.indisprimary
+	AND t.relname = :table_name
 GROUP BY
 	i.relname,
 	ix.indisunique

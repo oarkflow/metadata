@@ -87,7 +87,7 @@ type Index struct {
 type Indices struct {
 	Name    string                  `json:"name" gorm:"column:name"`
 	Unique  bool                    `json:"unique" gorm:"column:unique"`
-	Columns datatypes.Array[string] `json:"columns" gorm:"type:text[] column:columns"`
+	Columns datatypes.Array[string] `json:"columns" gorm:"type:text column:columns"`
 }
 
 type SourceFields struct {
