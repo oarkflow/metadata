@@ -22,11 +22,11 @@ type Http struct {
 	ExpiresIn   int
 }
 
-func (p *Http) GetForeignKeys(table string) (fields []ForeignKey, err error) {
+func (p *Http) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
 	return nil, nil
 }
 
-func (p *Http) GetIndices(table string) (fields []Index, err error) {
+func (p *Http) GetIndices(table string, database ...string) (fields []Index, err error) {
 	return nil, nil
 }
 
@@ -55,7 +55,7 @@ func (p *Http) Commit() DataSource {
 	return nil
 }
 
-func (p *Http) GetSources() ([]Source, error) {
+func (p *Http) GetSources(database ...string) ([]Source, error) {
 	return nil, nil
 }
 
@@ -71,15 +71,15 @@ func (p *Http) MaxID(table, field string) (id any, err error) {
 	panic("implement me")
 }
 
-func (p *Http) GetTables() ([]Source, error) {
+func (p *Http) GetTables(database ...string) ([]Source, error) {
 	return nil, nil
 }
 
-func (p *Http) GetViews() ([]Source, error) {
+func (p *Http) GetViews(database ...string) ([]Source, error) {
 	return nil, nil
 }
 
-func (p *Http) GetFields(table string) ([]Field, error) {
+func (p *Http) GetFields(table string, database ...string) ([]Field, error) {
 	return nil, nil
 }
 
@@ -126,7 +126,7 @@ func (p *Http) DB() (*sql.DB, error) {
 	return nil, nil
 }
 
-func (p *Http) GetDBName() string {
+func (p *Http) GetDBName(database ...string) string {
 	return ""
 }
 

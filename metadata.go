@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	
+
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
@@ -135,7 +135,7 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 		if field.Default != nil && !strings.Contains(fmt.Sprintf("%v", field.Default), "nextval") {
 			prop.Default = fmt.Sprintf("%v", field.Default)
 		}
-		
+
 		if field.Length != 0 {
 			prop.MaxLength = field.Length
 		}
@@ -147,7 +147,7 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 			if !(def == "now()" || strings.ToUpper(field.DataType) == "TIMESTAMP" || def == "CURRENT_TIMESTAMP" || field.Key == "PRI") {
 				schema.Required = append(schema.Required, field.Name)
 			}
-			
+
 		}
 		switch strings.ToUpper(field.DataType) {
 		case "BOOL", "BOOLEAN":
@@ -180,13 +180,13 @@ type DB interface{}
 
 type DataSource interface {
 	Config() Config
-	GetDBName() string
-	GetSources() (tables []Source, err error)
+	GetDBName(database ...string) string
+	GetSources(database ...string) (tables []Source, err error)
 	GetDataTypeMap(dataType string) string
-	GetTables() ([]Source, error)
-	GetViews() ([]Source, error)
-	GetForeignKeys(table string) (fields []ForeignKey, err error)
-	GetIndices(table string) (fields []Index, err error)
+	GetTables(database ...string) ([]Source, error)
+	GetViews(database ...string) ([]Source, error)
+	GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error)
+	GetIndices(table string, database ...string) (fields []Index, err error)
 	Begin() (squealx.SQLTx, error)
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
@@ -194,7 +194,7 @@ type DataSource interface {
 	MaxID(table, field string) (id any, err error)
 	Client() any
 	Connect() (DataSource, error)
-	GetFields(table string) (fields []Field, err error)
+	GetFields(table string, database ...string) (fields []Field, err error)
 	GetCollection(table string) ([]map[string]any, error)
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
 	GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse
@@ -453,10 +453,10 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 	if sliceType.Kind() != reflect.Slice {
 		return nil
 	}
-	
+
 	sliceValue := reflect.ValueOf(val)
 	length := sliceValue.Len()
-	
+
 	for i := 0; i < length; i += size {
 		end := i + size
 		if end > length {
@@ -468,7 +468,7 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
