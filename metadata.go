@@ -211,7 +211,7 @@ func NewFromClient(client dbresolver.DBResolver) DataSource {
 	switch client.DriverName() {
 	case "mysql", "mariadb":
 		return &MySQL{client: client}
-	case "postgres", "psql", "postgresql":
+	case "postgres", "psql", "postgresql", "pgx", "pq":
 		return &Postgres{client: client}
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		return &MsSQL{client: client}
