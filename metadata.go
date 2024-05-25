@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-
+	
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
 	"github.com/oarkflow/pkg/str"
@@ -135,7 +135,7 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 		if field.Default != nil && !strings.Contains(fmt.Sprintf("%v", field.Default), "nextval") {
 			prop.Default = fmt.Sprintf("%v", field.Default)
 		}
-
+		
 		if field.Length != 0 {
 			prop.MaxLength = field.Length
 		}
@@ -147,7 +147,7 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 			if !(def == "now()" || strings.ToUpper(field.DataType) == "TIMESTAMP" || def == "CURRENT_TIMESTAMP" || field.Key == "PRI") {
 				schema.Required = append(schema.Required, field.Name)
 			}
-
+			
 		}
 		switch strings.ToUpper(field.DataType) {
 		case "BOOL", "BOOLEAN":
@@ -224,7 +224,7 @@ func NewFromDB(client *squealx.DB) DataSource {
 	switch client.DriverName() {
 	case "mysql", "mariadb":
 		return &MySQL{client: resolver}
-	case "postgres", "psql", "postgresql":
+	case "postgres", "psql", "postgresql", "pgx", "pq":
 		return &Postgres{client: resolver}
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		return &MsSQL{client: resolver}
@@ -272,7 +272,7 @@ func New(config Config) DataSource {
 		con := NewMySQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
-	case "postgres", "psql", "postgresql":
+	case "postgres", "psql", "postgresql", "pgx", "pq":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}
@@ -453,10 +453,10 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 	if sliceType.Kind() != reflect.Slice {
 		return nil
 	}
-
+	
 	sliceValue := reflect.ValueOf(val)
 	length := sliceValue.Len()
-
+	
 	for i := 0; i < length; i += size {
 		end := i + size
 		if end > length {
@@ -468,7 +468,7 @@ func processBatchInsert(client dbresolver.DBResolver, table string, val any, siz
 			return err
 		}
 	}
-
+	
 	return nil
 }
 
