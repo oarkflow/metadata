@@ -219,6 +219,19 @@ func NewFromClient(client dbresolver.DBResolver) DataSource {
 	return nil
 }
 
+func NewFromDB(client *squealx.DB) DataSource {
+	resolver, _ := dbresolver.New(dbresolver.WithMasterDBs(client))
+	switch client.DriverName() {
+	case "mysql", "mariadb":
+		return &MySQL{client: resolver}
+	case "postgres", "psql", "postgresql":
+		return &Postgres{client: resolver}
+	case "sql-server", "sqlserver", "mssql", "ms-sql":
+		return &MsSQL{client: resolver}
+	}
+	return nil
+}
+
 func New(config Config) DataSource {
 	connectionPooling := ConnectionPooling{
 		MaxLifetime: 60,
