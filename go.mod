@@ -7,7 +7,7 @@ require (
 	github.com/oarkflow/json v0.0.6
 	github.com/oarkflow/pkg v0.1.47
 	github.com/oarkflow/protocol v0.0.16
-	github.com/oarkflow/squealx v0.0.18
+	github.com/oarkflow/squealx v0.0.19
 )
 
 require (

@@ -57,8 +57,8 @@ github.com/oarkflow/protocol v0.0.16 h1:3qNn9gwoJOpdz+owyAmW4fNMpQplqHVIjzsWM4r0
 github.com/oarkflow/protocol v0.0.16/go.mod h1:iKP/I+3/FIWlZ6OphAo8c60JO2qgwethOMR+NMsMI28=
 github.com/oarkflow/render v0.0.1 h1:Caw74Yu8OE/tjCjurhbUkS0Fi9zE/mzVvQa1Cw7m7R4=
 github.com/oarkflow/render v0.0.1/go.mod h1:nnRhxhKn9NCPtTfbsaLuyCt86Iv9hMbNPDFQoPucQYI=
-github.com/oarkflow/squealx v0.0.18 h1:Znr/uuLQ3uXt6A4EPjiw/b7uSQbSf8TWIRZpzdr6Kg0=
-github.com/oarkflow/squealx v0.0.18/go.mod h1:bfCtKnV76wgEISyU/75gBXsdgbYrFek62z8QJWVJ3Q0=
+github.com/oarkflow/squealx v0.0.19 h1:sjlhY/MfyQIaaTPLCanCNa2qZvXjc5dnGOUXlRNDxzA=
+github.com/oarkflow/squealx v0.0.19/go.mod h1:bfCtKnV76wgEISyU/75gBXsdgbYrFek62z8QJWVJ3Q0=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
