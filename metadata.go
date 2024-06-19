@@ -87,7 +87,7 @@ type Index struct {
 type Indices struct {
 	Name    string                  `json:"name" gorm:"column:name"`
 	Unique  bool                    `json:"unique" gorm:"column:unique"`
-	Columns datatypes.Array[string] `json:"columns" gorm:"type:text[] column:columns"`
+	Columns datatypes.Array[string] `json:"columns" gorm:"type:text column:columns"`
 }
 
 type SourceFields struct {
@@ -180,13 +180,13 @@ type DB interface{}
 
 type DataSource interface {
 	Config() Config
-	GetDBName() string
-	GetSources() (tables []Source, err error)
+	GetDBName(database ...string) string
+	GetSources(database ...string) (tables []Source, err error)
 	GetDataTypeMap(dataType string) string
-	GetTables() ([]Source, error)
-	GetViews() ([]Source, error)
-	GetForeignKeys(table string) (fields []ForeignKey, err error)
-	GetIndices(table string) (fields []Index, err error)
+	GetTables(database ...string) ([]Source, error)
+	GetViews(database ...string) ([]Source, error)
+	GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error)
+	GetIndices(table string, database ...string) (fields []Index, err error)
 	Begin() (squealx.SQLTx, error)
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
@@ -194,7 +194,7 @@ type DataSource interface {
 	MaxID(table, field string) (id any, err error)
 	Client() any
 	Connect() (DataSource, error)
-	GetFields(table string) (fields []Field, err error)
+	GetFields(table string, database ...string) (fields []Field, err error)
 	GetCollection(table string) ([]map[string]any, error)
 	GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error)
 	GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse
@@ -211,10 +211,23 @@ func NewFromClient(client dbresolver.DBResolver) DataSource {
 	switch client.DriverName() {
 	case "mysql", "mariadb":
 		return &MySQL{client: client}
-	case "postgres", "psql", "postgresql":
+	case "postgres", "psql", "postgresql", "pgx", "pq":
 		return &Postgres{client: client}
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		return &MsSQL{client: client}
+	}
+	return nil
+}
+
+func NewFromDB(client *squealx.DB) DataSource {
+	resolver, _ := dbresolver.New(dbresolver.WithMasterDBs(client))
+	switch client.DriverName() {
+	case "mysql", "mariadb":
+		return &MySQL{client: resolver}
+	case "postgres", "psql", "postgresql", "pgx", "pq":
+		return &Postgres{client: resolver}
+	case "sql-server", "sqlserver", "mssql", "ms-sql":
+		return &MsSQL{client: resolver}
 	}
 	return nil
 }
@@ -259,7 +272,7 @@ func New(config Config) DataSource {
 		con := NewMySQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
-	case "postgres", "psql", "postgresql":
+	case "postgres", "psql", "postgresql", "pgx", "pq":
 		if config.Host == "" {
 			config.Host = "0.0.0.0"
 		}

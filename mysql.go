@@ -71,9 +71,13 @@ func (p *MySQL) Connect() (DataSource, error) {
 	return p, nil
 }
 
-func (p *MySQL) GetSources() (tables []Source, err error) {
+func (p *MySQL) GetSources(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&tables, "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_schema = :schema", map[string]any{
-		"schema": p.schema,
+		"schema": db,
 	})
 	return
 }
@@ -89,16 +93,24 @@ func (p *MySQL) GetDataTypeMap(dataType string) string {
 	return "VARCHAR"
 }
 
-func (p *MySQL) GetTables() (tables []Source, err error) {
+func (p *MySQL) GetTables(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&tables, "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_schema = :schema AND table_type='BASE TABLE'", map[string]any{
-		"schema": p.schema,
+		"schema": db,
 	})
 	return
 }
 
-func (p *MySQL) GetViews() (tables []Source, err error) {
+func (p *MySQL) GetViews(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&tables, "SELECT table_name as name, view_definition FROM information_schema.views WHERE table_schema = :schema", map[string]any{
-		"schema": p.schema,
+		"schema": db,
 	})
 	return
 }
@@ -107,8 +119,12 @@ func (p *MySQL) Client() any {
 	return p.client
 }
 
-func (p *MySQL) GetDBName() string {
-	return p.schema
+func (p *MySQL) GetDBName(database ...string) string {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	return db
 }
 
 func (p *MySQL) Store(table string, val any) error {
@@ -120,10 +136,14 @@ func (p *MySQL) StoreInBatches(table string, val any, size int) error {
 	return processBatchInsert(p.client, table, val, size)
 }
 
-func (p *MySQL) GetFields(table string) (fields []Field, err error) {
+func (p *MySQL) GetFields(table string, database ...string) (fields []Field, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	var fieldMaps []map[string]any
 	err = p.client.Select(&fieldMaps, "SELECT column_name as `name`, column_default as `default`, is_nullable as `is_nullable`, data_type as type, CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as `length`, numeric_scale as `precision`, column_comment as `comment`, column_key as `key`, extra as extra FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME =  :table_name AND TABLE_SCHEMA = :schema;", map[string]any{
-		"schema":     p.schema,
+		"schema":     db,
 		"table_name": table,
 	})
 	if err != nil {
@@ -137,25 +157,37 @@ func (p *MySQL) GetFields(table string) (fields []Field, err error) {
 	return
 }
 
-func (p *MySQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
+func (p *MySQL) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&fields, "SELECT distinct cu.column_name as `name`, cu.referenced_table_name as `referenced_table`, cu.referenced_column_name as `referenced_column` FROM information_schema.key_column_usage cu INNER JOIN information_schema.referential_constraints rc ON rc.constraint_schema = cu.table_schema AND rc.table_name = cu.table_name AND rc.constraint_name = cu.constraint_name WHERE cu.table_name=:table_name AND TABLE_SCHEMA=:schema;", map[string]any{
-		"schema":     p.schema,
+		"schema":     db,
 		"table_name": table,
 	})
 	return
 }
 
-func (p *MySQL) GetIndices(table string) (fields []Index, err error) {
+func (p *MySQL) GetIndices(table string, database ...string) (fields []Index, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&fields, "SELECT DISTINCT s.index_name as name, s.column_name as column_name, s.nullable as `nullable` FROM INFORMATION_SCHEMA.STATISTICS s LEFT OUTER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS t ON t.TABLE_SCHEMA = s.TABLE_SCHEMA AND t.TABLE_NAME = s.TABLE_NAME AND s.INDEX_NAME = t.CONSTRAINT_NAME WHERE s.TABLE_NAME=:table_name AND s.TABLE_SCHEMA = :schema;", map[string]any{
-		"schema":     p.schema,
+		"schema":     db,
 		"table_name": table,
 	})
 	return
 }
 
-func (p *MySQL) GetTheIndices(table string) (fields []Indices, err error) {
+func (p *MySQL) GetTheIndices(table string, database ...string) (fields []Indices, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&fields, `SELECT INDEX_NAME AS name, NON_UNIQUE as uniq, CONCAT('[', GROUP_CONCAT(CONCAT('"',COLUMN_NAME,'"') ORDER BY SEQ_IN_INDEX) ,']') AS columns FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table_name GROUP BY INDEX_NAME, NON_UNIQUE;`, map[string]any{
-		"schema":     p.schema,
+		"schema":     db,
 		"table_name": table,
 	})
 	return

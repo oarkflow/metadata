@@ -38,7 +38,7 @@ func (p *MsSQL) Connect() (DataSource, error) {
 	return p, nil
 }
 
-func (p *MsSQL) GetDBName() string {
+func (p *MsSQL) GetDBName(database ...string) string {
 	return p.schema
 }
 
@@ -64,7 +64,7 @@ func (p *MsSQL) Client() any {
 	return p.client
 }
 
-func (p *MsSQL) GetSources() (tables []Source, err error) {
+func (p *MsSQL) GetSources(database ...string) (tables []Source, err error) {
 	// TODO implement me
 	panic("implement me")
 }
@@ -73,22 +73,22 @@ func (p *MsSQL) GetDataTypeMap(dataType string) string {
 	panic("implement me")
 }
 
-func (p *MsSQL) GetTables() (tables []Source, err error) {
+func (p *MsSQL) GetTables(database ...string) (tables []Source, err error) {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p *MsSQL) GetViews() (tables []Source, err error) {
+func (p *MsSQL) GetViews(database ...string) (tables []Source, err error) {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p *MsSQL) GetFields(table string) (fields []Field, err error) {
+func (p *MsSQL) GetFields(table string, database ...string) (fields []Field, err error) {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p *MsSQL) GetForeignKeys(table string) (fields []ForeignKey, err error) {
+func (p *MsSQL) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
 	// TODO implement me
 	panic("implement me")
 }
@@ -97,7 +97,7 @@ func (p *MsSQL) Begin() (squealx.SQLTx, error) {
 	return p.client.Begin()
 }
 
-func (p *MsSQL) GetIndices(table string) (fields []Index, err error) {
+func (p *MsSQL) GetIndices(table string, database ...string) (fields []Index, err error) {
 	// TODO implement me
 	panic("implement me")
 }

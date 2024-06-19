@@ -91,10 +91,14 @@ func (p *Postgres) Connect() (DataSource, error) {
 	return p, nil
 }
 
-func (p *Postgres) GetSources() (tables []Source, err error) {
+func (p *Postgres) GetSources(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	sq := "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_catalog = :catalog AND table_schema = 'public'"
 	err = p.client.Select(&tables, sq, map[string]any{
-		"catalog": p.schema,
+		"catalog": db,
 	})
 	return
 }
@@ -106,18 +110,26 @@ func (p *Postgres) GetDataTypeMap(dataType string) string {
 	return "VARCHAR"
 }
 
-func (p *Postgres) GetTables() (tables []Source, err error) {
+func (p *Postgres) GetTables(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	sq := "SELECT table_name as name, table_type FROM information_schema.tables WHERE table_catalog = :catalog AND table_schema = 'public' AND table_type='BASE TABLE'"
 	err = p.client.Select(&tables, sq, map[string]any{
-		"catalog": p.schema,
+		"catalog": db,
 	})
 	return
 }
 
-func (p *Postgres) GetViews() (tables []Source, err error) {
+func (p *Postgres) GetViews(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	sq := "SELECT table_name as name, view_definition FROM information_schema.views WHERE table_catalog = :catalog AND table_schema = 'public' AND table_type='VIEW'"
 	err = p.client.Select(&tables, sq, map[string]any{
-		"catalog": p.schema,
+		"catalog": db,
 	})
 	return
 }
@@ -126,15 +138,23 @@ func (p *Postgres) Client() any {
 	return p.client
 }
 
-func (p *Postgres) GetDBName() string {
-	return p.schema
+func (p *Postgres) GetDBName(database ...string) string {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	return db
 }
 
 func (p *Postgres) Config() Config {
 	return p.config
 }
 
-func (p *Postgres) GetFields(table string) (fields []Field, err error) {
+func (p *Postgres) GetFields(table string, database ...string) (fields []Field, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	var fieldMaps []map[string]any
 	err = p.client.Select(&fieldMaps, `
 SELECT c.column_name as "name", column_default as "default", is_nullable as "is_nullable", data_type as "type", CASE WHEN numeric_precision IS NOT NULL THEN numeric_precision ELSE character_maximum_length END as "length", numeric_scale as "precision",a.column_key as "key", b.comment, '' as extra
@@ -164,7 +184,7 @@ WHERE table_catalog = :catalog AND table_schema = 'public' AND c.table_name =  :
 ) b ON c.table_name = b.table_name AND b.column_name = c.column_name
           WHERE c.table_catalog = :catalog AND c.table_schema = 'public' AND c.table_name =  :table_name
 ;`, map[string]any{
-		"catalog":    p.schema,
+		"catalog":    db,
 		"table_name": table,
 	})
 	if err != nil {
@@ -197,17 +217,25 @@ func (p *Postgres) MaxID(table, field string) (id any, err error) {
 	return
 }
 
-func (p *Postgres) GetForeignKeys(table string) (fields []ForeignKey, err error) {
+func (p *Postgres) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&fields, `select kcu.column_name as "name", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = :catalog AND kcu.table_schema = 'public' AND kcu.table_name = :table_name order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, map[string]any{
-		"catalog":    p.schema,
+		"catalog":    db,
 		"table_name": table,
 	})
 	return
 }
 
-func (p *Postgres) GetIndices(table string) (fields []Index, err error) {
+func (p *Postgres) GetIndices(table string, database ...string) (fields []Index, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
 	err = p.client.Select(&fields, `select DISTINCT kcu.constraint_name as "name", kcu.column_name as "column_name", enforced as "nullable" from information_schema.table_constraints tco join information_schema.key_column_usage kcu       on kcu.constraint_name = tco.constraint_name      and kcu.constraint_schema = tco.constraint_schema      and kcu.constraint_name = tco.constraint_name      WHERE tco.table_catalog = :catalog AND tco.table_schema = 'public' AND tco.table_name = :table_name;`, map[string]any{
-		"catalog":    p.schema,
+		"catalog":    db,
 		"table_name": table,
 	})
 	return
@@ -219,7 +247,7 @@ func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
 	err = p.client.Select(&incides, `
 SELECT
 	i.relname AS name,
-	array_agg(a.attname) AS columns,
+	json_agg(a.attname) AS columns,
 	ix.indisunique AS unique
 FROM
 	pg_class t,
@@ -231,10 +259,9 @@ WHERE
 	AND i.oid = ix.indexrelid
 	AND a.attrelid = t.oid
 	AND a.attnum = ANY (ix.indkey)
-	AND t.relkind = 'r' -- ordinary table
-	-- AND ix.indisunique -- is unique
-	AND NOT ix.indisprimary -- is not primary
-	AND t.relname = :table_name -- name of table
+	AND t.relkind = 'r'
+	AND NOT ix.indisprimary
+	AND t.relname = :table_name
 GROUP BY
 	i.relname,
 	ix.indisunique
