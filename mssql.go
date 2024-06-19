@@ -34,6 +34,7 @@ func (p *MsSQL) Connect() (DataSource, error) {
 		p.client.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
 		p.client.SetMaxOpenConns(p.pooling.MaxOpenCons)
 		p.client.SetMaxIdleConns(p.pooling.MaxIdleCons)
+		p.client.SetDefaultDB(p.id)
 	}
 	return p, nil
 }
