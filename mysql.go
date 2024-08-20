@@ -372,7 +372,6 @@ func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (
 	if len(indices) > 0 {
 		existingIndices, err := p.GetTheIndices(table)
 		if err != nil {
-			panic(err)
 			return "", err
 		}
 		fmt.Println(existingIndices)
@@ -418,7 +417,6 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 		}
 		fieldExists := false
 		if newField.OldName == "" {
-			fieldName := newField.Name
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
 					fieldExists = true
@@ -432,11 +430,7 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 						}
 					}
 					if existingField.IsNullable != newField.IsNullable {
-						if newField.IsNullable == "YES" {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, fieldName))
-						} else {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, fieldName))
-						}
+						sql = append(sql, fmt.Sprintf("%s MODIFY %s;", alterTable, p.FieldAsString(existingField, "column")))
 					}
 				}
 			}

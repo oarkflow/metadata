@@ -8,7 +8,6 @@ import (
 
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
-	"github.com/oarkflow/pkg/str"
 	"github.com/oarkflow/protocol/utils/xid"
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/datatypes"
@@ -116,7 +115,7 @@ func (s *Schema) Bytes() []byte {
 
 func (s *Schema) String() string {
 	bt, _ := json.Marshal(s)
-	return str.FromByte(bt)
+	return FromByte(bt)
 }
 
 func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *Schema {
