@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 
 	"github.com/oarkflow/squealx"
 
@@ -51,8 +50,6 @@ func main() {
 		Limit: 1,
 		Page:  1,
 	}
-	f, _ := src.GetRawCollection("SELeCT * FROM accounts")
-	fmt.Println(len(f))
 	for !last {
 		resp := src.GetRawPaginatedCollection("SELECT * FROM accounts", *paging)
 		if resp.Error != nil {
@@ -69,8 +66,6 @@ func main() {
 				last = true
 			}
 		}
-		runtime.GC()
-		fmt.Println(paging, fromDB)
 		paging.Page++
 	}
 	fmt.Println(paging)
@@ -91,7 +86,7 @@ func conn() (src, dst metadata.DataSource) {
 		Driver:   "postgresql",
 		Username: "postgres",
 		Password: "postgres",
-		Database: "clear20_dev",
+		Database: "clear20",
 	}
 	src = metadata.New(cfg1)
 	dst = metadata.New(cfg)
