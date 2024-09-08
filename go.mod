@@ -6,7 +6,7 @@ require (
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.9
 	github.com/oarkflow/protocol v0.0.16
-	github.com/oarkflow/squealx v0.0.20
+	github.com/oarkflow/squealx v0.0.23
 )
 
 require (
@@ -19,7 +19,7 @@ require (
 	github.com/hetiansu5/urlquery v1.2.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.6.0 // indirect
+	github.com/jackc/pgx/v5 v5.7.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/microsoft/go-mssqldb v1.7.2 // indirect
 	github.com/oarkflow/expr v0.0.10 // indirect
