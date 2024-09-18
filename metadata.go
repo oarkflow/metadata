@@ -23,17 +23,17 @@ var builtInFunctions = []string{
 }
 
 type ConnectionPooling struct {
-	MaxLifetime int64 `yaml:"max_lifetime" json:"max_lifetime"`
-	MaxIdleTime int64 `yaml:"max_idle_time" json:"max_idle_time"`
-	MaxOpenCons int   `yaml:"max_open_cons" json:"max_open_cons"`
-	MaxIdleCons int   `yaml:"max_idle_cons" json:"max_idle_cons"`
+	MaxLifetime int64 `yaml:"max_lifetime" json:"max_lifetime,string"`
+	MaxIdleTime int64 `yaml:"max_idle_time" json:"max_idle_time,string"`
+	MaxOpenCons int   `yaml:"max_open_cons" json:"max_open_cons,string"`
+	MaxIdleCons int   `yaml:"max_idle_cons" json:"max_idle_cons,string"`
 }
 
 type Config struct {
 	Name          string `json:"name"`
 	Key           string `json:"key"`
 	Host          string `json:"host"`
-	Port          int    `json:"port"`
+	Port          int    `json:"port,string"`
 	Driver        string `json:"driver"`
 	Username      string `json:"username"`
 	Password      string `json:"password"`
@@ -42,11 +42,11 @@ type Config struct {
 	Timezone      string `json:"timezone"`
 	Charset       string `json:"charset"`
 	Location      string `json:"location"`
-	DisableLogger bool   `json:"disable_logger"`
-	MaxLifetime   int64  `yaml:"max_lifetime" json:"max_lifetime"`
-	MaxIdleTime   int64  `yaml:"max_idle_time" json:"max_idle_time"`
-	MaxOpenCons   int    `yaml:"max_open_cons" json:"max_open_cons"`
-	MaxIdleCons   int    `yaml:"max_idle_cons" json:"max_idle_cons"`
+	DisableLogger bool   `json:"disable_logger,string"`
+	MaxLifetime   int64  `yaml:"max_lifetime" json:"max_lifetime,string"`
+	MaxIdleTime   int64  `yaml:"max_idle_time" json:"max_idle_time,string"`
+	MaxOpenCons   int    `yaml:"max_open_cons" json:"max_open_cons,string"`
+	MaxIdleCons   int    `yaml:"max_idle_cons" json:"max_idle_cons,string"`
 }
 
 type Source struct {
