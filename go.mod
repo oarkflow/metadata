@@ -4,7 +4,7 @@ go 1.22.3
 
 require (
 	github.com/oarkflow/errors v0.0.6
-	github.com/oarkflow/json v0.0.9
+	github.com/oarkflow/json v0.0.13
 	github.com/oarkflow/protocol v0.0.16
 	github.com/oarkflow/squealx v0.0.24
 )
@@ -22,14 +22,14 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/microsoft/go-mssqldb v1.7.2 // indirect
-	github.com/oarkflow/expr v0.0.10 // indirect
+	github.com/oarkflow/expr v0.0.11 // indirect
 	github.com/oarkflow/log v1.0.79 // indirect
 	github.com/oarkflow/render v0.0.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20240103092955-90b7d1423f92 // indirect
 	github.com/xhit/go-simple-mail/v2 v2.16.0 // indirect
-	golang.org/x/crypto v0.27.0 // indirect
-	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
+	golang.org/x/crypto v0.28.0 // indirect
+	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
-	golang.org/x/time v0.6.0 // indirect
+	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/time v0.7.0 // indirect
 )

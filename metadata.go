@@ -20,6 +20,7 @@ var builtInFunctions = []string{
 	"now()",
 	"true",
 	"false",
+	"null",
 }
 
 type ConnectionPooling struct {

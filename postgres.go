@@ -348,10 +348,9 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 				}
 			}
 		}
-
 		switch def := f.Default.(type) {
 		case string:
-			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+			if contains(builtInFunctions, strings.ToLower(def)) {
 				defaultVal = fmt.Sprintf("DEFAULT %s", def)
 			} else {
 				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
@@ -591,11 +590,10 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	if err != nil {
 		return err
 	}
-	sql, err := dst.GenerateSQL(table, fields)
+	_, err = dst.GenerateSQL(table, fields)
 	if err != nil {
 		return err
 	}
-	fmt.Println(sql)
 	return nil
 }
 
@@ -640,7 +638,6 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
 	}
-
 	if defaultVal == "DEFAULT '0000-00-00 00:00:00'" {
 		nullable = "NULL"
 		defaultVal = "DEFAULT NULL"
