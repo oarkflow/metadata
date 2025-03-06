@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/oarkflow/squealx"
@@ -40,10 +41,19 @@ func mai1n() {
 }
 
 func main() {
-	_, source := conn()
+	cfg := []byte(`{"host":"localhost","port":5432,"driver":"postgresql","username":"postgres","password":"postgres","database":"clear_dev"}`)
+	var config metadata.Config
+	err := json.Unmarshal(cfg, &config)
+	if err != nil {
+		panic(err)
+	}
+	source := metadata.New(config)
 	src, err := source.Connect()
 	if err != nil {
 		panic(err)
+	}
+	if src == nil {
+		panic("No DB")
 	}
 	last := false
 	paging := &squealx.Paging{
@@ -51,7 +61,7 @@ func main() {
 		Page:  1,
 	}
 	for !last {
-		resp := src.GetRawPaginatedCollection("SELECT * FROM accounts", *paging)
+		resp := src.GetRawPaginatedCollection("SELECT * FROM facilities", *paging)
 		if resp.Error != nil {
 			panic(resp.Error)
 		}

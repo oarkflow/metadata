@@ -6,7 +6,7 @@ require (
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.14
 	github.com/oarkflow/protocol v0.0.16
-	github.com/oarkflow/squealx v0.0.29
+	github.com/oarkflow/squealx v0.0.36
 )
 
 require (

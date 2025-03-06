@@ -74,6 +74,11 @@ type Constraint struct {
 	ForeignKeys []metadata.ForeignKey `json:"foreign"`
 }
 
+type Partition struct {
+	Type  string `json:"type"`
+	Field string `json:"field"`
+}
+
 type Model struct {
 	Name            string           `json:"name"`
 	OldName         string           `json:"old_name"`
@@ -83,6 +88,7 @@ type Model struct {
 	ModelType       string           `json:"model_type"`
 	Query           Query            `json:"query"`
 	Constraints     Constraint       `json:"constraints"`
+	Partition       Partition        `json:"partition"`
 	Fields          []metadata.Field `json:"fields"`
 	FullTextSearch  bool             `json:"full_text_search"`
 	GenerateRestApi bool             `json:"generate_rest_api"`
