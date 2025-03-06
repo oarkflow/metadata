@@ -322,6 +322,7 @@ func (p *Postgres) GetPaginated(table string, paging squealx.Paging) squealx.Pag
 	return p.client.Paginate("SELECT * FROM "+table, &rows, paging)
 }
 
+// GetSingle - Get a single row
 func (p *Postgres) GetSingle(table string) (map[string]any, error) {
 	var row map[string]any
 	if err := p.client.Select(&row, fmt.Sprintf("SELECT * FROM %s LIMIT 1", table)); err != nil {
