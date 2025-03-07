@@ -31,23 +31,25 @@ type ConnectionPooling struct {
 }
 
 type Config struct {
-	Name          string `json:"name"`
-	Key           string `json:"key"`
-	Host          string `json:"host"`
-	Port          int    `json:"port"`
-	Driver        string `json:"driver"`
-	Username      string `json:"username"`
-	Password      string `json:"password"`
-	Database      string `json:"database"`
-	SslMode       string `json:"ssl_mode"`
-	Timezone      string `json:"timezone"`
-	Charset       string `json:"charset"`
-	Location      string `json:"location"`
-	DisableLogger bool   `json:"disable_logger"`
-	MaxLifetime   int64  `yaml:"max_lifetime" json:"max_lifetime"`
-	MaxIdleTime   int64  `yaml:"max_idle_time" json:"max_idle_time"`
-	MaxOpenCons   int    `yaml:"max_open_cons" json:"max_open_cons"`
-	MaxIdleCons   int    `yaml:"max_idle_cons" json:"max_idle_cons"`
+	Name          string            `json:"name"`
+	Key           string            `json:"key"`
+	Host          string            `json:"host"`
+	Port          int               `json:"port"`
+	Driver        string            `json:"driver"`
+	Username      string            `json:"username"`
+	Password      string            `json:"password"`
+	Database      string            `json:"database"`
+	SslMode       string            `json:"ssl_mode"`
+	TLS           string            `json:"tls"`
+	Timezone      string            `json:"timezone"`
+	Charset       string            `json:"charset"`
+	Location      string            `json:"location"`
+	DisableLogger bool              `json:"disable_logger"`
+	MaxLifetime   int64             `yaml:"max_lifetime" json:"max_lifetime"`
+	MaxIdleTime   int64             `yaml:"max_idle_time" json:"max_idle_time"`
+	MaxOpenCons   int               `yaml:"max_open_cons" json:"max_open_cons"`
+	MaxIdleCons   int               `yaml:"max_idle_cons" json:"max_idle_cons"`
+	Options       map[string]string `json:"options"`
 }
 
 type Source struct {
@@ -268,7 +270,17 @@ func New(config Config) DataSource {
 		if config.Location == "" {
 			config.Location = "Local"
 		}
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=preferred", config.Username, config.Password, config.Host, config.Port, config.Database)
+		var opts []string
+		if config.Options != nil {
+			for key, val := range config.Options {
+				opts = append(opts, fmt.Sprintf("%s=%s", key, val))
+			}
+		}
+		if config.TLS != "" {
+			opts = append(opts, fmt.Sprintf("tls=%s", config.TLS))
+		}
+		options := strings.Join(opts, "&")
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", config.Username, config.Password, config.Host, config.Port, config.Database, options)
 		con := NewMySQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
