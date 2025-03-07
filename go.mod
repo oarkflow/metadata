@@ -3,6 +3,8 @@ module github.com/oarkflow/metadata
 go 1.23
 
 require (
+	github.com/goccy/go-json v0.10.5
+	github.com/oarkflow/convert v0.0.4
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.14
 	github.com/oarkflow/protocol v0.0.16
@@ -22,6 +24,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/microsoft/go-mssqldb v1.8.0 // indirect
+	github.com/oarkflow/date v0.0.4 // indirect
 	github.com/oarkflow/expr v0.0.11 // indirect
 	github.com/oarkflow/jet v0.0.4 // indirect
 	github.com/oarkflow/log v1.0.79 // indirect

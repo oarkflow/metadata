@@ -268,7 +268,7 @@ func New(config Config) DataSource {
 		if config.Location == "" {
 			config.Location = "Local"
 		}
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s", config.Username, config.Password, config.Host, config.Port, config.Database, config.Charset, true, config.Location)
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=preferred", config.Username, config.Password, config.Host, config.Port, config.Database)
 		con := NewMySQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
@@ -297,6 +297,10 @@ func New(config Config) DataSource {
 		con := NewMsSQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
+	case "json":
+		return NewJSONDataSource(config.Database)
+	case "csv":
+		return NewCSVDataSource(config.Database)
 	}
 	return nil
 }
