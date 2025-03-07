@@ -119,6 +119,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(sql)
+
 	/*sqlParts := strings.Split(sql, ";")
 	for _, sq := range sqlParts {
 		if sq != "" {
