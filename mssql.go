@@ -227,7 +227,10 @@ func (p *MsSQL) Config() Config {
 }
 
 func (p *MsSQL) GetDataTypeMap(dataType string) string {
-	if v, ok := mssqlDataTypes[dataType]; ok {
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
+	
+	if v, ok := mssqlDataTypes[baseDataType]; ok {
 		return v
 	}
 	return "NVARCHAR"
@@ -454,6 +457,18 @@ func (p *MsSQL) GetType() string {
 
 func getMSSQLFieldAlterDataType(table string, f Field) string {
 	dataTypes := mssqlDataTypes
+	
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+	
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+	
 	defaultVal := ""
 	if f.Default != nil {
 		switch def := f.Default.(type) {
@@ -472,7 +487,7 @@ func getMSSQLFieldAlterDataType(table string, f Field) string {
 		nullable = "NOT NULL"
 	}
 
-	switch f.DataType {
+	switch baseDataType {
 	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 18
@@ -481,27 +496,27 @@ func getMSSQLFieldAlterDataType(table string, f Field) string {
 			f.Precision = 2
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal)
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal)
 		}
-		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal)
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal)
 	case "int", "integer":
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 		}
-		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 	case "string", "varchar", "text", "character varying", "char":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal)
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal)
 		}
-		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal)
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal)
 	default:
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 		}
-		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 	}
 }
 
@@ -569,7 +584,12 @@ func (p *MsSQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
 					fieldExists = true
-					if mssqlDataTypes[existingField.DataType] != mssqlDataTypes[newField.DataType] ||
+					
+					// Parse data types to compare base types
+					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
+					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
+					
+					if mssqlDataTypes[existingBaseType] != mssqlDataTypes[newBaseType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default ||
 						existingField.Comment != newField.Comment {

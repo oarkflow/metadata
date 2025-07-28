@@ -214,7 +214,10 @@ func (p *MySQL) Config() Config {
 }
 
 func (p *MySQL) GetDataTypeMap(dataType string) string {
-	if v, ok := mysqlDataTypes[dataType]; ok {
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
+	
+	if v, ok := mysqlDataTypes[baseDataType]; ok {
 		return v
 	}
 	return "VARCHAR"
@@ -400,9 +403,21 @@ func (p *MySQL) GetType() string {
 
 func getMySQLFieldAlterDataType(table string, f Field) string {
 	dataTypes := mysqlDataTypes
+	
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+	
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+	
 	defaultVal := ""
 	if f.Default != nil {
-		if v, ok := dataTypes[f.DataType]; ok {
+		if v, ok := dataTypes[baseDataType]; ok {
 			switch v1 := f.Default.(type) {
 			case bool:
 				if v1 {
@@ -441,7 +456,7 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 		nullable = "NULL"
 		defaultVal = "DEFAULT NULL"
 	}
-	switch f.DataType {
+	switch baseDataType {
 	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 11
@@ -450,30 +465,30 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			f.Precision = 2
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
 	case "int", "integer":
 		if f.Length == 0 {
 			f.Length = 11
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
 	case "string", "varchar", "text", "character varying", "char":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal, f.Comment)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
 	default:
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[f.DataType], nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], nullable, defaultVal, f.Comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal, f.Comment)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal, f.Comment)
 	}
 }
 
@@ -546,7 +561,12 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 			for _, existingField := range existingFields {
 				if existingField.Name == newField.Name {
 					fieldExists = true
-					if mysqlDataTypes[existingField.DataType] != mysqlDataTypes[newField.DataType] ||
+					
+					// Parse data types to compare base types
+					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
+					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
+					
+					if mysqlDataTypes[existingBaseType] != mysqlDataTypes[newBaseType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default ||
 						existingField.Comment != newField.Comment {

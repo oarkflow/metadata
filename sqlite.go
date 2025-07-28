@@ -214,7 +214,10 @@ func (p *SQLite) Config() Config {
 }
 
 func (p *SQLite) GetDataTypeMap(dataType string) string {
-	if v, ok := sqliteDataTypes[dataType]; ok {
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
+	
+	if v, ok := sqliteDataTypes[baseDataType]; ok {
 		return v
 	}
 	return "TEXT"
@@ -458,6 +461,18 @@ func (p *SQLite) GetType() string {
 func getSQLiteFieldAlterDataType(table string, f Field) string {
 	// SQLite has limited ALTER TABLE support, most changes require recreating the table
 	dataTypes := sqliteDataTypes
+	
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+	
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+	
 	defaultVal := ""
 	if f.Default != nil {
 		switch def := f.Default.(type) {
@@ -476,7 +491,7 @@ func getSQLiteFieldAlterDataType(table string, f Field) string {
 		nullable = "NOT NULL"
 	}
 
-	return fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+	return fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 }
 
 func (p *SQLite) alterFieldSQL(table string, f, existingField Field) string {

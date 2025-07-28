@@ -221,7 +221,10 @@ func (p *Postgres) GetSources(database ...string) (tables []Source, err error) {
 }
 
 func (p *Postgres) GetDataTypeMap(dataType string) string {
-	if v, ok := postgresDataTypes[dataType]; ok {
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
+	
+	if v, ok := postgresDataTypes[baseDataType]; ok {
 		return v
 	}
 	return "VARCHAR"
@@ -453,9 +456,21 @@ func (p *Postgres) GetType() string {
 
 func getPostgresFieldAlterDataType(table string, f Field) string {
 	dataTypes := postgresDataTypes
+	
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+	
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+	
 	defaultVal := ""
 	if f.Default != nil {
-		if v, ok := dataTypes[f.DataType]; ok {
+		if v, ok := dataTypes[baseDataType]; ok {
 			if v == "BOOLEAN" {
 				switch f.Default {
 				case "0":
@@ -478,13 +493,13 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			f.DataType = "serial"
+			baseDataType = "serial"
 		}
 	}
 	fieldName := f.Name
-	switch f.DataType {
+	switch baseDataType {
 	case "int", "integer", "smallint", "bigint", "int2", "int4", "int8":
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[f.DataType], fieldName, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[baseDataType], fieldName, dataTypes[baseDataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
@@ -496,7 +511,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Precision == 0 {
 			f.Precision = 2
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) USING %s::%s;", table, fieldName, dataTypes[f.DataType], f.Length, f.Precision, fieldName, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d,%d) USING %s::%s;", table, fieldName, dataTypes[baseDataType], f.Length, f.Precision, fieldName, dataTypes[baseDataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
@@ -505,7 +520,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		if f.Length == 0 {
 			f.Length = 255
 		}
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) USING %s::%s;", table, fieldName, dataTypes[f.DataType], f.Length, fieldName, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s(%d) USING %s::%s;", table, fieldName, dataTypes[baseDataType], f.Length, fieldName, dataTypes[baseDataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
@@ -519,7 +534,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 		sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, "DEFAULT nextval('"+table+"_"+fieldName+"_seq'::regclass)")
 		return sql
 	default:
-		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[f.DataType], fieldName, dataTypes[f.DataType])
+		sql := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s USING %s::%s;", table, fieldName, dataTypes[baseDataType], fieldName, dataTypes[baseDataType])
 		if defaultVal != "" {
 			sql += fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s;", table, fieldName, defaultVal)
 		}
@@ -604,7 +619,12 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 			for _, existingField := range existingFields {
 				if existingField.Name == fieldName {
 					fieldExists = true
-					if postgresDataTypes[existingField.DataType] != postgresDataTypes[newField.DataType] ||
+					
+					// Parse data types to compare base types
+					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
+					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
+					
+					if postgresDataTypes[existingBaseType] != postgresDataTypes[newBaseType] ||
 						existingField.Length != newField.Length ||
 						existingField.Default != newField.Default {
 						qry := p.alterFieldSQL(table, newField, existingField)

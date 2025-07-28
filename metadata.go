@@ -151,7 +151,11 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 			}
 
 		}
-		switch strings.ToUpper(field.DataType) {
+		
+		// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+		baseDataType, _, _ := parseDataTypeWithParameters(field.DataType)
+		
+		switch strings.ToUpper(baseDataType) {
 		case "BOOL", "BOOLEAN":
 			prop.Type = "boolean"
 		case "FLOAT", "FLOAT32", "DECIMAL", "DOUBLE":
