@@ -291,7 +291,7 @@ func InferJSONFileType(data interface{}) (map[string]string, error) {
 	}
 }
 
-func main() {
+func ma3in() {
 	// --- CSV Example ---
 	csvData := `Name,Age,Salary,StartDate,Active
 John,30,55,000.50,2020-01-15,true

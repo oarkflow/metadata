@@ -75,3 +75,47 @@ func combineTypes(current, new string) string {
 	// If one is bool but the other is not, or any other conflict, fallback to string.
 	return "string"
 }
+
+// parseDataTypeWithParameters parses data types that may contain length and precision parameters
+// Examples: varchar(255), numeric(10,2), double(10,2)
+// Returns: baseType, length, precision
+func parseDataTypeWithParameters(dataType string) (string, int, int) {
+	// Check if dataType contains parentheses
+	if !strings.Contains(dataType, "(") || !strings.Contains(dataType, ")") {
+		return dataType, 0, 0
+	}
+
+	// Split the dataType into base type and parameters
+	parts := strings.SplitN(dataType, "(", 2)
+	if len(parts) != 2 {
+		return dataType, 0, 0
+	}
+
+	baseType := strings.TrimSpace(parts[0])
+	paramsPart := strings.TrimSpace(parts[1])
+
+	// Remove the closing parenthesis
+	paramsPart = strings.TrimSuffix(paramsPart, ")")
+
+	// Split parameters by comma
+	params := strings.Split(paramsPart, ",")
+
+	var length, precision int
+	var err error
+
+	// Parse first parameter (length)
+	if len(params) > 0 {
+		if length, err = strconv.Atoi(strings.TrimSpace(params[0])); err != nil {
+			length = 0
+		}
+	}
+
+	// Parse second parameter (precision) if it exists
+	if len(params) > 1 {
+		if precision, err = strconv.Atoi(strings.TrimSpace(params[1])); err != nil {
+			precision = 0
+		}
+	}
+
+	return baseType, length, precision
+}

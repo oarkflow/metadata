@@ -34,23 +34,149 @@ var mysqlQueries = map[string]string{
 }
 
 var mysqlDataTypes = map[string]string{
-	"int":       "INTEGER",
-	"integer":   "INTEGER",
+	// Integer types
+	"int":       "INT",
+	"integer":   "INT",
+	"int4":      "INT", // PostgreSQL int4
+	"smallint":  "SMALLINT",
+	"int2":      "SMALLINT", // PostgreSQL int2
+	"mediumint": "MEDIUMINT",
 	"bigint":    "BIGINT",
-	"float":     "FLOAT",
-	"double":    "DOUBLE",
-	"decimal":   "DECIMAL",
-	"char":      "CHAR",
+	"int8":      "BIGINT", // PostgreSQL int8
 	"tinyint":   "TINYINT",
-	"string":    "VARCHAR",
-	"varchar":   "VARCHAR",
-	"text":      "TEXT",
-	"datetime":  "DATETIME",
-	"date":      "DATE",
-	"time":      "TIME",
-	"timestamp": "TIMESTAMP",
-	"bool":      "TINYINT",
-	"boolean":   "TINYINT",
+	"bit":       "BIT",
+
+	// Serial types (PostgreSQL) -> MySQL AUTO_INCREMENT equivalents
+	"serial":      "INT",      // Will be handled specially for AUTO_INCREMENT
+	"serial4":     "INT",      // Will be handled specially for AUTO_INCREMENT
+	"bigserial":   "BIGINT",   // Will be handled specially for AUTO_INCREMENT
+	"serial8":     "BIGINT",   // Will be handled specially for AUTO_INCREMENT
+	"smallserial": "SMALLINT", // Will be handled specially for AUTO_INCREMENT
+	"serial2":     "SMALLINT", // Will be handled specially for AUTO_INCREMENT
+
+	// Floating point types
+	"float":            "FLOAT",
+	"float4":           "FLOAT", // PostgreSQL float4
+	"double":           "DOUBLE",
+	"double precision": "DOUBLE",
+	"float8":           "DOUBLE", // PostgreSQL float8
+	"decimal":          "DECIMAL",
+	"numeric":          "DECIMAL",
+	"real":             "FLOAT",
+	"money":            "DECIMAL", // PostgreSQL/SQL Server money
+	"smallmoney":       "DECIMAL", // SQL Server smallmoney
+
+	// String types
+	"char":              "CHAR",
+	"character":         "CHAR", // PostgreSQL character
+	"varchar":           "VARCHAR",
+	"character varying": "VARCHAR", // PostgreSQL character varying
+	"string":            "VARCHAR",
+	"text":              "TEXT",
+	"tinytext":          "TINYTEXT",
+	"mediumtext":        "MEDIUMTEXT",
+	"longtext":          "LONGTEXT",
+	"longText":          "LONGTEXT", // Case variation
+	"LongText":          "LONGTEXT", // Case variation
+
+	// Unicode string types (SQL Server) -> MySQL equivalents
+	"nchar":    "CHAR",
+	"nvarchar": "VARCHAR",
+	"ntext":    "TEXT",
+
+	// Binary types
+	"binary":     "BINARY",
+	"varbinary":  "VARBINARY",
+	"blob":       "BLOB",
+	"tinyblob":   "TINYBLOB",
+	"mediumblob": "MEDIUMBLOB",
+	"longblob":   "LONGBLOB",
+	"bytea":      "LONGBLOB", // PostgreSQL binary type
+	"image":      "LONGBLOB", // SQL Server binary type
+
+	// Date and time types
+	"date":                     "DATE",
+	"time":                     "TIME",
+	"datetime":                 "DATETIME",
+	"datetime2":                "DATETIME", // SQL Server datetime2
+	"smalldatetime":            "DATETIME", // SQL Server smalldatetime
+	"timestamp":                "TIMESTAMP",
+	"timestamptz":              "TIMESTAMP", // PostgreSQL timestamptz
+	"timestamp with time zone": "TIMESTAMP", // PostgreSQL timestamp with time zone
+	"time with time zone":      "TIME",      // PostgreSQL time with time zone
+	"timetz":                   "TIME",      // PostgreSQL timetz
+	"year":                     "YEAR",
+	"interval":                 "VARCHAR(50)", // PostgreSQL interval -> VARCHAR
+	"datetimeoffset":           "DATETIME",    // SQL Server datetimeoffset
+
+	// Boolean types
+	"bool":    "TINYINT",
+	"boolean": "TINYINT",
+
+	// JSON and XML types
+	"json":  "JSON",
+	"jsonb": "JSON", // PostgreSQL binary JSON
+	"xml":   "TEXT", // MySQL doesn't have native XML
+
+	// UUID and GUID types
+	"uuid":             "CHAR(36)",
+	"uniqueidentifier": "CHAR(36)", // SQL Server GUID
+	"guid":             "CHAR(36)",
+
+	// Geometric types
+	"geometry":           "GEOMETRY",
+	"geography":          "GEOMETRY", // SQL Server geography
+	"point":              "POINT",
+	"line":               "LINESTRING", // PostgreSQL line
+	"lseg":               "LINESTRING", // PostgreSQL line segment
+	"box":                "POLYGON",    // PostgreSQL box
+	"path":               "LINESTRING", // PostgreSQL path
+	"polygon":            "POLYGON",
+	"circle":             "POLYGON", // PostgreSQL circle -> approximate with polygon
+	"linestring":         "LINESTRING",
+	"geometrycollection": "GEOMETRYCOLLECTION",
+	"multipoint":         "MULTIPOINT",
+	"multilinestring":    "MULTILINESTRING",
+	"multipolygon":       "MULTIPOLYGON",
+
+	// Network types (PostgreSQL) -> VARCHAR equivalents
+	"inet":     "VARCHAR(45)", // IP address
+	"cidr":     "VARCHAR(43)", // CIDR notation
+	"macaddr":  "VARCHAR(17)", // MAC address
+	"macaddr8": "VARCHAR(23)", // EUI-64 MAC address
+
+	// Array and range types (PostgreSQL) -> TEXT equivalents
+	"array":     "TEXT", // Store as JSON or comma-separated
+	"int4range": "TEXT",
+	"int8range": "TEXT",
+	"numrange":  "TEXT",
+	"tsrange":   "TEXT",
+	"tstzrange": "TEXT",
+	"daterange": "TEXT",
+
+	// Text search types (PostgreSQL) -> TEXT equivalents
+	"tsvector": "TEXT",
+	"tsquery":  "TEXT",
+
+	// Bit string types
+	"bit varying": "VARCHAR", // PostgreSQL bit varying
+	"varbit":      "VARCHAR", // PostgreSQL bit varying
+
+	// Other SQL Server types
+	"hierarchyid": "VARCHAR(255)",
+	"sql_variant": "TEXT",
+	"cursor":      "TEXT", // Not applicable
+	"table":       "TEXT", // Not applicable
+
+	// SQLite affinity types
+	"clob":              "TEXT",
+	"varying character": "VARCHAR",
+	"native character":  "CHAR",
+	"unsigned big int":  "BIGINT",
+
+	// Enum and set
+	"enum": "ENUM",
+	"set":  "SET",
 }
 
 func (p *MySQL) Connect() (DataSource, error) {
@@ -504,6 +630,29 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 	comment := ""
 	primaryKey := ""
 	autoIncrement := ""
+
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+
+	// Use the base data type for mapping
+	actualDataType := baseDataType
+
+	// Check if data type exists in mapping, provide fallback
+	mappedDataType, exists := dataTypes[actualDataType]
+	if !exists {
+		// Fallback to VARCHAR for unknown types
+		mappedDataType = "VARCHAR"
+		actualDataType = "varchar"
+	}
+
 	if strings.ToUpper(f.IsNullable) == "NO" {
 		nullable = "NOT NULL"
 	}
@@ -535,22 +684,31 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 			autoIncrement = "AUTO_INCREMENT"
 		}
 	}
-	switch f.DataType {
+
+	// Handle PostgreSQL serial types by adding AUTO_INCREMENT
+	if strings.Contains(actualDataType, "serial") {
+		autoIncrement = "AUTO_INCREMENT"
+		if action != "column" {
+			primaryKey = "PRIMARY KEY"
+		}
+	}
+
+	switch actualDataType {
 	case "string", "varchar", "text", "char":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "int", "integer", "big_integer", "bigInteger", "tinyint":
 		if f.Length == 0 {
 			f.Length = 11
 		}
-		if f.DataType == "tinyint" {
+		if actualDataType == "tinyint" {
 			f.Length = 1
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal":
 		if f.Length == 0 {
 			f.Length = 11
@@ -559,10 +717,10 @@ func (p *MySQL) FieldAsString(f Field, action string) string {
 			f.Precision = 2
 		}
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
 }
 

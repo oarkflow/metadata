@@ -189,6 +189,7 @@ type DataSource interface {
 	GetViews(database ...string) ([]Source, error)
 	GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error)
 	GetIndices(table string, database ...string) (fields []Index, err error)
+	GetTheIndices(table string, database ...string) (fields []Indices, err error)
 	Begin() (squealx.SQLTx, error)
 	Exec(sql string, values ...any) error
 	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
@@ -207,6 +208,7 @@ type DataSource interface {
 	Store(table string, val any) error
 	StoreInBatches(table string, val any, size int) error
 	Close() error
+	FieldAsString(f Field, action string) string
 }
 
 func NewFromClient(client dbresolver.DBResolver) DataSource {
@@ -217,6 +219,8 @@ func NewFromClient(client dbresolver.DBResolver) DataSource {
 		return &Postgres{client: client}
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		return &MsSQL{client: client}
+	case "sqlite", "sqlite3":
+		return &SQLite{client: client}
 	}
 	return nil
 }
@@ -230,6 +234,8 @@ func NewFromDB(client *squealx.DB) DataSource {
 		return &Postgres{client: resolver}
 	case "sql-server", "sqlserver", "mssql", "ms-sql":
 		return &MsSQL{client: resolver}
+	case "sqlite", "sqlite3":
+		return &SQLite{client: resolver}
 	}
 	return nil
 }
@@ -307,6 +313,15 @@ func New(config Config) DataSource {
 		}
 		dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", config.Username, config.Password, config.Host, config.Port, config.Database)
 		con := NewMsSQL(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
+		con.config = config
+		return con
+	case "sqlite", "sqlite3":
+		// SQLite uses a file path as DSN
+		dsn := config.Database
+		if dsn == "" {
+			dsn = ":memory:" // In-memory database if no file specified
+		}
+		con := NewSQLite(config.Name, dsn, config.Database, config.DisableLogger, connectionPooling)
 		con.config = config
 		return con
 	case "json":

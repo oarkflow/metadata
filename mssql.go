@@ -1,7 +1,9 @@
 package metadata
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/oarkflow/squealx"
@@ -18,6 +20,173 @@ type MsSQL struct {
 	disableLog bool
 	pooling    ConnectionPooling
 	config     Config
+}
+
+var mssqlQueries = map[string]string{
+	"create_table":        "CREATE TABLE %s",
+	"alter_table":         "ALTER TABLE %s",
+	"column":              "[%s] %s",
+	"add_column":          "ADD [%s] %s",
+	"change_column":       "ALTER COLUMN [%s] %s",
+	"remove_column":       "ALTER COLUMN [%s] %s",
+	"create_unique_index": "CREATE UNIQUE INDEX %s ON %s (%s);",
+	"create_index":        "CREATE INDEX %s ON %s (%s);",
+}
+
+var mssqlDataTypes = map[string]string{
+	// Integer types
+	"bit":      "BIT",
+	"tinyint":  "TINYINT",
+	"smallint": "SMALLINT",
+	"int":      "INT",
+	"integer":  "INT",
+	"int4":     "INT", // PostgreSQL int4
+	"bigint":   "BIGINT",
+	"int8":     "BIGINT",   // PostgreSQL int8
+	"int2":     "SMALLINT", // PostgreSQL int2
+
+	// MySQL integer types -> SQL Server equivalents
+	"mediumint": "INT", // MySQL mediumint -> SQL Server int
+
+	// PostgreSQL serial types -> SQL Server IDENTITY equivalents
+	"serial":      "INT",      // Will be handled specially for IDENTITY
+	"serial4":     "INT",      // Will be handled specially for IDENTITY
+	"bigserial":   "BIGINT",   // Will be handled specially for IDENTITY
+	"serial8":     "BIGINT",   // Will be handled specially for IDENTITY
+	"smallserial": "SMALLINT", // Will be handled specially for IDENTITY
+	"serial2":     "SMALLINT", // Will be handled specially for IDENTITY
+
+	// Floating point types
+	"float":            "FLOAT",
+	"float4":           "REAL",  // PostgreSQL float4
+	"float8":           "FLOAT", // PostgreSQL float8
+	"real":             "REAL",
+	"double":           "FLOAT",
+	"double precision": "FLOAT",
+	"decimal":          "DECIMAL",
+	"numeric":          "NUMERIC",
+	"money":            "MONEY",
+	"smallmoney":       "SMALLMONEY",
+
+	// String types (Unicode)
+	"nchar":    "NCHAR",
+	"nvarchar": "NVARCHAR",
+	"ntext":    "NTEXT",
+	"string":   "NVARCHAR",
+	"varchar":  "NVARCHAR",
+	"text":     "NTEXT",
+
+	// String types (Non-Unicode)
+	"char":              "CHAR",
+	"character":         "CHAR", // PostgreSQL character
+	"varchar_ansi":      "VARCHAR",
+	"text_ansi":         "TEXT",
+	"character varying": "NVARCHAR", // PostgreSQL character varying -> Unicode
+
+	// MySQL string types -> SQL Server equivalents
+	"tinytext":   "NTEXT",
+	"mediumtext": "NTEXT",
+	"longtext":   "NTEXT",
+	"longText":   "NTEXT",
+	"LongText":   "NTEXT",
+
+	// Binary types
+	"binary":     "BINARY",
+	"varbinary":  "VARBINARY",
+	"image":      "IMAGE",
+	"bytea":      "VARBINARY(MAX)", // PostgreSQL bytea
+	"blob":       "VARBINARY(MAX)", // MySQL blob types
+	"tinyblob":   "VARBINARY(MAX)",
+	"mediumblob": "VARBINARY(MAX)",
+	"longblob":   "VARBINARY(MAX)",
+
+	// Date and time types
+	"date":                     "DATE",
+	"time":                     "TIME",
+	"datetime":                 "DATETIME2",
+	"datetime2":                "DATETIME2",
+	"smalldatetime":            "SMALLDATETIME",
+	"timestamp":                "DATETIME2",
+	"timestamptz":              "DATETIMEOFFSET", // PostgreSQL timestamptz
+	"timestamp with time zone": "DATETIMEOFFSET",
+	"time with time zone":      "DATETIMEOFFSET", // Closest equivalent
+	"timetz":                   "DATETIMEOFFSET", // PostgreSQL timetz
+	"datetimeoffset":           "DATETIMEOFFSET",
+	"interval":                 "NVARCHAR(50)", // PostgreSQL interval -> VARCHAR
+	"year":                     "SMALLINT",     // MySQL year
+
+	// Boolean types
+	"bool":    "BIT",
+	"boolean": "BIT",
+
+	// XML type
+	"xml": "XML",
+
+	// Spatial types
+	"geometry":  "GEOMETRY",
+	"geography": "GEOGRAPHY",
+
+	// PostgreSQL geometric types -> SQL Server equivalents
+	"point":   "GEOMETRY",
+	"line":    "GEOMETRY",
+	"lseg":    "GEOMETRY",
+	"box":     "GEOMETRY",
+	"path":    "GEOMETRY",
+	"polygon": "GEOMETRY",
+	"circle":  "GEOMETRY",
+
+	// MySQL geometric types -> SQL Server equivalents
+	"linestring":         "GEOMETRY",
+	"multipoint":         "GEOMETRY",
+	"multilinestring":    "GEOMETRY",
+	"multipolygon":       "GEOMETRY",
+	"geometrycollection": "GEOMETRY",
+
+	// Network types (PostgreSQL) -> NVARCHAR equivalents
+	"inet":     "NVARCHAR(45)", // IP address
+	"cidr":     "NVARCHAR(43)", // CIDR notation
+	"macaddr":  "NVARCHAR(17)", // MAC address
+	"macaddr8": "NVARCHAR(23)", // EUI-64 MAC address
+
+	// Array and range types (PostgreSQL) -> NVARCHAR equivalents
+	"array":     "NVARCHAR(MAX)", // Store as JSON
+	"int4range": "NVARCHAR(255)",
+	"int8range": "NVARCHAR(255)",
+	"numrange":  "NVARCHAR(255)",
+	"tsrange":   "NVARCHAR(255)",
+	"tstzrange": "NVARCHAR(255)",
+	"daterange": "NVARCHAR(255)",
+
+	// Text search types (PostgreSQL) -> NVARCHAR equivalents
+	"tsvector": "NVARCHAR(MAX)",
+	"tsquery":  "NVARCHAR(MAX)",
+
+	// Bit string types (PostgreSQL)
+	"bit varying": "VARBINARY",
+	"varbit":      "VARBINARY",
+
+	// Other types
+	"uniqueidentifier": "UNIQUEIDENTIFIER",
+	"guid":             "UNIQUEIDENTIFIER",
+	"uuid":             "UNIQUEIDENTIFIER", // PostgreSQL UUID
+	"sql_variant":      "SQL_VARIANT",
+	"hierarchyid":      "HIERARCHYID",
+	"cursor":           "CURSOR",
+	"table":            "TABLE",
+
+	// SQLite affinity types -> SQL Server equivalents
+	"clob":              "NTEXT",
+	"varying character": "NVARCHAR",
+	"native character":  "NCHAR",
+	"unsigned big int":  "BIGINT",
+
+	// MySQL specific types -> SQL Server equivalents
+	"enum": "NVARCHAR(255)", // MySQL ENUM -> NVARCHAR
+	"set":  "NVARCHAR(255)", // MySQL SET -> NVARCHAR
+
+	// JSON types
+	"json":  "NVARCHAR(MAX)", // JSON is stored as NVARCHAR in SQL Server
+	"jsonb": "NVARCHAR(MAX)", // PostgreSQL binary JSON
 }
 
 func (p *MsSQL) Connect() (DataSource, error) {
@@ -39,108 +208,69 @@ func (p *MsSQL) Connect() (DataSource, error) {
 	return p, nil
 }
 
-func (p *MsSQL) GetDBName(database ...string) string {
-	return p.schema
+func (p *MsSQL) GetSources(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	err = p.client.Select(&tables, `
+		SELECT
+			TABLE_NAME as name,
+			TABLE_TYPE as type
+		FROM INFORMATION_SCHEMA.TABLES
+		WHERE TABLE_CATALOG = ?`, db)
+	return
 }
 
 func (p *MsSQL) Config() Config {
 	return p.config
 }
 
-func (p *MsSQL) LastInsertedID() (id any, err error) {
-	err = p.client.Select(&id, "SELECT SCOPE_IDENTITY();")
+func (p *MsSQL) GetDataTypeMap(dataType string) string {
+	if v, ok := mssqlDataTypes[dataType]; ok {
+		return v
+	}
+	return "NVARCHAR"
+}
+
+func (p *MsSQL) GetTables(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	err = p.client.Select(&tables, `
+		SELECT
+			TABLE_NAME as name,
+			TABLE_TYPE as type
+		FROM INFORMATION_SCHEMA.TABLES
+		WHERE TABLE_CATALOG = ? AND TABLE_TYPE = 'BASE TABLE'`, db)
 	return
 }
 
-func (p *MsSQL) MaxID(table, field string) (id any, err error) {
-	err = p.client.Select(&id, fmt.Sprintf("SELECT MAX(%s) FROM %s;", field, table))
+func (p *MsSQL) GetViews(database ...string) (tables []Source, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	err = p.client.Select(&tables, `
+		SELECT
+			TABLE_NAME as name,
+			VIEW_DEFINITION as definition
+		FROM INFORMATION_SCHEMA.VIEWS
+		WHERE TABLE_CATALOG = ?`, db)
 	return
-}
-
-func (p *MsSQL) Close() error {
-	return p.client.Close()
 }
 
 func (p *MsSQL) Client() any {
 	return p.client
 }
 
-func (p *MsSQL) GetSources(database ...string) (tables []Source, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetDataTypeMap(dataType string) string {
-	panic("implement me")
-}
-
-func (p *MsSQL) GetTables(database ...string) (tables []Source, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetViews(database ...string) (tables []Source, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetFields(table string, database ...string) (fields []Field, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) Begin() (squealx.SQLTx, error) {
-	return p.client.Begin()
-}
-
-func (p *MsSQL) GetIndices(table string, database ...string) (fields []Index, err error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetCollection(table string) ([]map[string]any, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) Exec(sql string, values ...any) error {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GetSingle(table string) (map[string]any, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (p *MsSQL) Migrate(table string, dst DataSource) error {
-	// TODO implement me
-	panic("implement me")
+func (p *MsSQL) GetDBName(database ...string) string {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	return db
 }
 
 func (p *MsSQL) Store(table string, val any) error {
@@ -152,9 +282,442 @@ func (p *MsSQL) StoreInBatches(table string, val any, size int) error {
 	return processBatchInsert(p.client, table, val, size)
 }
 
+func (p *MsSQL) GetFields(table string, database ...string) (fields []Field, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	var fieldMaps []map[string]any
+	err = p.client.Select(&fieldMaps, `
+		SELECT
+			COLUMN_NAME as [name],
+			COLUMN_DEFAULT as [default],
+			IS_NULLABLE as [is_nullable],
+			DATA_TYPE as type,
+			COALESCE(NUMERIC_PRECISION, CHARACTER_MAXIMUM_LENGTH) as [length],
+			NUMERIC_SCALE as [precision],
+			'' as [comment],
+			CASE
+				WHEN pk.COLUMN_NAME IS NOT NULL THEN 'PRI'
+				ELSE ''
+			END as [key],
+			CASE
+				WHEN COLUMNPROPERTY(OBJECT_ID(TABLE_SCHEMA+'.'+TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1 THEN 'auto_increment'
+				ELSE ''
+			END as extra
+		FROM INFORMATION_SCHEMA.COLUMNS c
+		LEFT JOIN (
+			SELECT ku.TABLE_CATALOG, ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
+			FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS tc
+			INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS ku
+				ON tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+				AND tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
+		) pk ON c.TABLE_CATALOG = pk.TABLE_CATALOG
+			AND c.TABLE_SCHEMA = pk.TABLE_SCHEMA
+			AND c.TABLE_NAME = pk.TABLE_NAME
+			AND c.COLUMN_NAME = pk.COLUMN_NAME
+		WHERE c.TABLE_NAME = ? AND c.TABLE_CATALOG = ?
+		ORDER BY c.ORDINAL_POSITION`, table, db)
+	if err != nil {
+		return
+	}
+	bt, err := json.Marshal(fieldMaps)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(bt, &fields)
+	return
+}
+
+func (p *MsSQL) GetForeignKeys(table string, database ...string) (fields []ForeignKey, err error) {
+	db := p.schema
+	if len(database) > 0 {
+		db = database[0]
+	}
+	err = p.client.Select(&fields, `
+		SELECT
+			kcu.COLUMN_NAME as [name],
+			kcu.REFERENCED_TABLE_NAME as [referenced_table],
+			kcu.REFERENCED_COLUMN_NAME as [referenced_column]
+		FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+		LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+			ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+		WHERE kcu.TABLE_NAME = ? AND kcu.TABLE_CATALOG = ?`, table, db)
+	return
+}
+
+func (p *MsSQL) GetIndices(table string, database ...string) (fields []Index, err error) {
+	err = p.client.Select(&fields, `
+		SELECT DISTINCT
+			i.name as name,
+			c.name as column_name,
+			CASE WHEN c.is_nullable = 1 THEN 1 ELSE 0 END as [nullable]
+		FROM sys.indexes i
+		INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+		INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+		INNER JOIN sys.tables t ON i.object_id = t.object_id
+		WHERE t.name = ?`, table)
+	return
+}
+
+func (p *MsSQL) GetTheIndices(table string, database ...string) (fields []Indices, err error) {
+	err = p.client.Select(&fields, `
+		SELECT
+			i.name as name,
+			CASE WHEN i.is_unique = 1 THEN 0 ELSE 1 END as uniq,
+			'[' + STRING_AGG('"' + c.name + '"', ',') WITHIN GROUP (ORDER BY ic.key_ordinal) + ']' as columns
+		FROM sys.indexes i
+		INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+		INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+		INNER JOIN sys.tables t ON i.object_id = t.object_id
+		WHERE t.name = ? AND i.type > 0
+		GROUP BY i.name, i.is_unique`, table)
+	return
+}
+
+func (p *MsSQL) LastInsertedID() (id any, err error) {
+	err = p.client.Select(&id, "SELECT SCOPE_IDENTITY();")
+	return
+}
+
+func (p *MsSQL) MaxID(table, field string) (id any, err error) {
+	err = p.client.Select(&id, fmt.Sprintf("SELECT MAX([%s]) FROM [%s];", field, table))
+	return
+}
+
+func (p *MsSQL) GetCollection(table string) ([]map[string]any, error) {
+	var rows []map[string]any
+	err := p.client.Select(&rows, "SELECT * FROM ["+table+"]")
+	return rows, err
+}
+
+func (p *MsSQL) Close() error {
+	return p.client.Close()
+}
+
+func (p *MsSQL) Exec(sql string, values ...any) error {
+	_, err := p.client.Exec(sql, values...)
+	return err
+}
+
+func (p *MsSQL) Begin() (squealx.SQLTx, error) {
+	return p.client.Begin()
+}
+
+func (p *MsSQL) GetRawCollection(query string, params ...map[string]any) ([]map[string]any, error) {
+	var rows []map[string]any
+	if len(params) > 0 {
+		param := params[0]
+		if val, ok := param["preview"]; ok {
+			preview := val.(bool)
+			if preview {
+				query = strings.Split(query, " ORDER BY ")[0] + " ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY"
+			}
+		}
+		if len(param) > 0 {
+			if err := p.client.Select(&rows, query, param); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := p.client.Select(&rows, query); err != nil {
+				return nil, err
+			}
+		}
+	} else if err := p.client.Select(&rows, query); err != nil {
+		return nil, err
+	}
+
+	return rows, nil
+}
+
+func (p *MsSQL) GetRawPaginatedCollection(query string, paging squealx.Paging, params ...map[string]any) squealx.PaginatedResponse {
+	var rows []map[string]any
+	return p.client.Paginate(query, &rows, paging, params...)
+}
+
+func (p *MsSQL) GetPaginated(table string, paging squealx.Paging) squealx.PaginatedResponse {
+	var rows []map[string]any
+	return p.client.Paginate("SELECT * FROM ["+table+"]", &rows, paging)
+}
+
+func (p *MsSQL) GetSingle(table string) (map[string]any, error) {
+	var row map[string]any
+	if err := p.client.Select(&row, fmt.Sprintf("SELECT TOP 1 * FROM [%s]", table)); err != nil {
+		return nil, err
+	}
+	return row, nil
+}
+
 func (p *MsSQL) GetType() string {
-	// TODO implement me
-	panic("implement me")
+	return "mssql"
+}
+
+func getMSSQLFieldAlterDataType(table string, f Field) string {
+	dataTypes := mssqlDataTypes
+	defaultVal := ""
+	if f.Default != nil {
+		switch def := f.Default.(type) {
+		case string:
+			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
+		}
+	}
+	nullable := "NULL"
+	if strings.ToUpper(f.IsNullable) == "NO" {
+		nullable = "NOT NULL"
+	}
+
+	switch f.DataType {
+	case "float", "double", "decimal", "numeric":
+		if f.Length == 0 {
+			f.Length = 18
+		}
+		if f.Precision == 0 {
+			f.Precision = 2
+		}
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal)
+		}
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d,%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, f.Precision, nullable, defaultVal)
+	case "int", "integer":
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+		}
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+	case "string", "varchar", "text", "character varying", "char":
+		if f.Length == 0 {
+			f.Length = 255
+		}
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal)
+		}
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s(%d) %s %s;", table, f.Name, dataTypes[f.DataType], f.Length, nullable, defaultVal)
+	default:
+		if f.OldName != "" {
+			return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+		}
+		return fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] %s %s %s;", table, f.Name, dataTypes[f.DataType], nullable, defaultVal)
+	}
+}
+
+func (p *MsSQL) alterFieldSQL(table string, f, existingField Field) string {
+	newSQL := getMSSQLFieldAlterDataType(table, f)
+	existingSQL := getMSSQLFieldAlterDataType(table, existingField)
+	if newSQL != existingSQL {
+		return newSQL
+	}
+	return ""
+}
+
+func (p *MsSQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+	var sql string
+	var query, indexQuery, primaryKeys []string
+	for _, newField := range newFields {
+		if strings.ToUpper(newField.Key) == "PRI" {
+			primaryKeys = append(primaryKeys, "["+newField.Name+"]")
+		}
+		query = append(query, p.FieldAsString(newField, "column"))
+	}
+	if len(indices) > 0 {
+		for _, index := range indices {
+			if index.Name == "" {
+				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+			}
+			switch index.Unique {
+			case true:
+				query := fmt.Sprintf(mssqlQueries["create_unique_index"], index.Name, "["+table+"]",
+					"["+strings.Join(index.Columns, "], [")+"]")
+				indexQuery = append(indexQuery, query)
+			case false:
+				query := fmt.Sprintf(mssqlQueries["create_index"], index.Name, "["+table+"]",
+					"["+strings.Join(index.Columns, "], [")+"]")
+				indexQuery = append(indexQuery, query)
+			}
+		}
+	}
+	if len(primaryKeys) > 0 {
+		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
+	}
+	if len(query) > 0 {
+		fieldsToUpdate := strings.Join(query, ", ")
+		sql = fmt.Sprintf(mssqlQueries["create_table"], "["+table+"]") + " (" + fieldsToUpdate + ");"
+	}
+	if len(indexQuery) > 0 {
+		sql += strings.Join(indexQuery, "")
+	}
+	return sql, nil
+}
+
+func (p *MsSQL) alterSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+	var sql []string
+	alterTable := "ALTER TABLE [" + table + "]"
+	existingFields, err := p.GetFields(table)
+	if err != nil {
+		return "", err
+	}
+	for _, newField := range newFields {
+		if newField.IsNullable == "" {
+			newField.IsNullable = "YES"
+		}
+		fieldExists := false
+		if newField.OldName == "" {
+			for _, existingField := range existingFields {
+				if existingField.Name == newField.Name {
+					fieldExists = true
+					if mssqlDataTypes[existingField.DataType] != mssqlDataTypes[newField.DataType] ||
+						existingField.Length != newField.Length ||
+						existingField.Default != newField.Default ||
+						existingField.Comment != newField.Comment {
+						qry := p.alterFieldSQL(table, newField, existingField)
+						if qry != "" {
+							sql = append(sql, qry)
+						}
+					}
+					if existingField.IsNullable != newField.IsNullable {
+						sql = append(sql, fmt.Sprintf("%s ALTER COLUMN %s;", alterTable, p.FieldAsString(existingField, "column")))
+					}
+				}
+			}
+		}
+
+		if !fieldExists {
+			qry := alterTable + " " + p.FieldAsString(newField, "add_column") + ";"
+			if qry != "" {
+				sql = append(sql, qry)
+			}
+		}
+	}
+
+	if len(sql) > 0 {
+		return strings.Join(sql, ""), nil
+	}
+	return "", nil
+}
+
+func (p *MsSQL) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+	sources, err := p.GetSources()
+	if err != nil {
+		return "", err
+	}
+	sourceExists := false
+	for _, source := range sources {
+		if source.Name == table {
+			sourceExists = true
+			break
+		}
+	}
+	if !sourceExists {
+		return p.createSQL(table, newFields, indices...)
+	}
+	return p.alterSQL(table, newFields, indices...)
+}
+
+func (p *MsSQL) Migrate(table string, dst DataSource) error {
+	fields, err := p.GetFields(table)
+	if err != nil {
+		return err
+	}
+	sql, err := dst.GenerateSQL(table, fields)
+	if err != nil {
+		return err
+	}
+	fmt.Println(sql)
+	return nil
+}
+
+func (p *MsSQL) FieldAsString(f Field, action string) string {
+	sqlPattern := mssqlQueries
+	dataTypes := mssqlDataTypes
+	nullable := "NULL"
+	defaultVal := ""
+	primaryKey := ""
+	autoIncrement := ""
+
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+
+	// Use the base data type for mapping
+	actualDataType := baseDataType
+
+	// Check if data type exists in mapping, provide fallback
+	mappedDataType, exists := dataTypes[actualDataType]
+	if !exists {
+		// Fallback to NVARCHAR for unknown types
+		mappedDataType = "NVARCHAR"
+		actualDataType = "nvarchar"
+	}
+
+	// Handle PostgreSQL serial types specially - convert to IDENTITY
+	if actualDataType == "serial" || actualDataType == "serial4" {
+		mappedDataType = "INT"
+		autoIncrement = "IDENTITY(1,1)"
+	} else if actualDataType == "bigserial" || actualDataType == "serial8" {
+		mappedDataType = "BIGINT"
+		autoIncrement = "IDENTITY(1,1)"
+	} else if actualDataType == "smallserial" || actualDataType == "serial2" {
+		mappedDataType = "SMALLINT"
+		autoIncrement = "IDENTITY(1,1)"
+	}
+
+	if strings.ToUpper(f.IsNullable) == "NO" {
+		nullable = "NOT NULL"
+	}
+	if f.Default != nil {
+		switch def := f.Default.(type) {
+		case string:
+			if contains(builtInFunctions, strings.ToLower(def)) {
+				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			} else {
+				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
+			}
+		default:
+			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
+		}
+	}
+
+	if f.Key != "" && strings.ToUpper(f.Key) == "PRI" && action != "column" {
+		primaryKey = "PRIMARY KEY"
+	}
+	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
+		autoIncrement = "IDENTITY(1,1)"
+	}
+
+	switch actualDataType {
+	case "string", "varchar", "text", "char":
+		if f.Length == 0 {
+			f.Length = 255
+		}
+		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s"
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, f.Length, nullable, primaryKey, autoIncrement, defaultVal), " "))
+	case "int", "integer", "big_integer", "bigInteger", "tinyint":
+		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
+	case "float", "double", "decimal":
+		if f.Length == 0 {
+			f.Length = 18
+		}
+		if f.Precision == 0 {
+			f.Precision = 2
+		}
+		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal), " "))
+	default:
+		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
+	}
 }
 
 func NewMsSQL(id, dsn, database string, disableLog bool, pooling ConnectionPooling) *MsSQL {
@@ -162,6 +725,7 @@ func NewMsSQL(id, dsn, database string, disableLog bool, pooling ConnectionPooli
 		schema:     database,
 		dsn:        dsn,
 		id:         id,
+		client:     nil,
 		disableLog: disableLog,
 		pooling:    pooling,
 	}

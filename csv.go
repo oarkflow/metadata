@@ -216,3 +216,13 @@ func (ds *CSVDataSource) StoreInBatches(table string, val any, size int) error {
 func (ds *CSVDataSource) Close() error {
 	return nil
 }
+
+func (ds *CSVDataSource) FieldAsString(f Field, action string) string {
+	// CSV datasource doesn't support SQL generation
+	return ""
+}
+
+func (ds *CSVDataSource) GetTheIndices(table string, database ...string) ([]Indices, error) {
+	// CSV datasource doesn't support indices
+	return []Indices{}, nil
+}

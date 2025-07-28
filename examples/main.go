@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/oarkflow/squealx"
+	"strings"
 
 	"github.com/oarkflow/metadata"
+	"github.com/oarkflow/squealx"
 )
 
 type Person struct {
@@ -79,6 +79,16 @@ func main() {
 		paging.Page++
 	}
 	fmt.Println(paging)
+
+	// Run comprehensive database examples
+	fmt.Println("\n" + strings.Repeat("=", 60))
+	fmt.Println("COMPREHENSIVE DATABASE EXAMPLES")
+	fmt.Println(strings.Repeat("=", 60))
+
+	RunDatabaseExamples()
+	SQLiteExample()
+	EnhancedMigrationExample()
+	DataTypeAnalysisExample()
 }
 
 func conn() (src, dst metadata.DataSource) {

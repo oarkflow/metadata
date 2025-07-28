@@ -6,7 +6,7 @@ import (
 	"github.com/oarkflow/metadata"
 )
 
-func main() {
+func ma1in() {
 	cfg := metadata.Config{
 		Driver:   "json",
 		Database: "icd10_codes.json",

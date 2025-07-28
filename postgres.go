@@ -35,42 +35,158 @@ var postgresQueries = map[string]string{
 }
 
 var postgresDataTypes = map[string]string{
-	"smallint":                 "SMALLINT",
-	"int2":                     "SMALLINT",
-	"int":                      "INT",
-	"int4":                     "INT",
-	"integer":                  "INT",
-	"bigint":                   "BIGINT",
-	"int8":                     "BIGINT",
-	"float":                    "NUMERIC",
-	"numeric":                  "NUMERIC",
-	"double":                   "NUMERIC",
-	"decimal":                  "NUMERIC",
-	"tinyint":                  "BOOLEAN",
-	"bool":                     "BOOLEAN",
-	"boolean":                  "BOOLEAN",
-	"string":                   "VARCHAR",
-	"varchar":                  "VARCHAR",
-	"character varying":        "VARCHAR",
-	"year":                     "SMALLINT",
-	"char":                     "CHAR",
-	"character":                "CHAR",
-	"text":                     "TEXT",
-	"longText":                 "TEXT",
-	"longtext":                 "TEXT",
-	"LongText":                 "TEXT",
-	"serial":                   "SERIAL",
-	"serial4":                  "SERIAL",
-	"bigserial":                "BIGSERIAL",
-	"serial8":                  "BIGSERIAL",
-	"datetime":                 "TIMESTAMPTZ",
+	// Integer types
+	"smallint":    "SMALLINT",
+	"int2":        "SMALLINT",
+	"int":         "INTEGER",
+	"int4":        "INTEGER",
+	"integer":     "INTEGER",
+	"bigint":      "BIGINT",
+	"int8":        "BIGINT",
+	"serial":      "SERIAL",
+	"serial4":     "SERIAL",
+	"bigserial":   "BIGSERIAL",
+	"serial8":     "BIGSERIAL",
+	"smallserial": "SMALLSERIAL",
+	"serial2":     "SMALLSERIAL",
+
+	// MySQL integer types -> PostgreSQL equivalents
+	"tinyint":   "SMALLINT", // MySQL tinyint -> PostgreSQL smallint
+	"mediumint": "INTEGER",  // MySQL mediumint -> PostgreSQL integer
+
+	// Floating point types
+	"real":             "REAL",
+	"float4":           "REAL",
+	"double precision": "DOUBLE PRECISION",
+	"float8":           "DOUBLE PRECISION",
+	"float":            "REAL",
+	"double":           "DOUBLE PRECISION",
+	"numeric":          "NUMERIC",
+	"decimal":          "NUMERIC",
+	"money":            "MONEY",
+	"smallmoney":       "NUMERIC", // SQL Server smallmoney -> NUMERIC
+
+	// String types
+	"char":              "CHAR",
+	"character":         "CHAR",
+	"varchar":           "VARCHAR",
+	"character varying": "VARCHAR",
+	"string":            "VARCHAR",
+	"text":              "TEXT",
+	"longtext":          "TEXT",
+	"longText":          "TEXT",
+	"LongText":          "TEXT",
+
+	// MySQL string types -> PostgreSQL equivalents
+	"tinytext":   "TEXT",
+	"mediumtext": "TEXT",
+
+	// SQL Server Unicode string types -> PostgreSQL equivalents
+	"nchar":    "CHAR",
+	"nvarchar": "VARCHAR",
+	"ntext":    "TEXT",
+
+	// Date and time types
 	"date":                     "DATE",
 	"time":                     "TIME",
+	"timetz":                   "TIME WITH TIME ZONE",
+	"time with time zone":      "TIME WITH TIME ZONE",
 	"timestamp":                "TIMESTAMP",
-	"timestamptz":              "TIMESTAMPTZ",
-	"timestamp with time zone": "TIMESTAMPTZ",
-	"jsonb":                    "JSONB",
-	"json":                     "JSON",
+	"timestamptz":              "TIMESTAMP WITH TIME ZONE",
+	"timestamp with time zone": "TIMESTAMP WITH TIME ZONE",
+	"datetime":                 "TIMESTAMP",                // MySQL/SQL Server datetime
+	"datetime2":                "TIMESTAMP",                // SQL Server datetime2
+	"smalldatetime":            "TIMESTAMP",                // SQL Server smalldatetime
+	"datetimeoffset":           "TIMESTAMP WITH TIME ZONE", // SQL Server datetimeoffset
+	"interval":                 "INTERVAL",
+	"year":                     "SMALLINT", // MySQL year
+
+	// Boolean types
+	"bool":    "BOOLEAN",
+	"boolean": "BOOLEAN",
+
+	// Binary types
+	"bytea":      "BYTEA",
+	"binary":     "BYTEA", // MySQL/SQL Server binary
+	"varbinary":  "BYTEA", // MySQL/SQL Server varbinary
+	"blob":       "BYTEA", // MySQL blob types
+	"tinyblob":   "BYTEA",
+	"mediumblob": "BYTEA",
+	"longblob":   "BYTEA",
+	"image":      "BYTEA", // SQL Server image
+
+	// Network address types
+	"cidr":     "CIDR",
+	"inet":     "INET",
+	"macaddr":  "MACADDR",
+	"macaddr8": "MACADDR8",
+
+	// Bit string types
+	"bit varying": "BIT VARYING",
+	"varbit":      "BIT VARYING",
+
+	// UUID type
+	"uuid":             "UUID",
+	"uniqueidentifier": "UUID", // SQL Server GUID
+	"guid":             "UUID",
+
+	// JSON types
+	"json":  "JSON",
+	"jsonb": "JSONB",
+
+	// Array types
+	"array": "ARRAY",
+
+	// Range types
+	"int4range": "INT4RANGE",
+	"int8range": "INT8RANGE",
+	"numrange":  "NUMRANGE",
+	"tsrange":   "TSRANGE",
+	"tstzrange": "TSTZRANGE",
+	"daterange": "DATERANGE",
+
+	// Geometric types
+	"point":   "POINT",
+	"line":    "LINE",
+	"lseg":    "LSEG",
+	"box":     "BOX",
+	"path":    "PATH",
+	"polygon": "POLYGON",
+	"circle":  "CIRCLE",
+
+	// MySQL geometric types -> PostgreSQL equivalents
+	"geometry":           "GEOMETRY", // PostGIS extension
+	"linestring":         "GEOMETRY", // PostGIS extension
+	"multipoint":         "GEOMETRY", // PostGIS extension
+	"multilinestring":    "GEOMETRY", // PostGIS extension
+	"multipolygon":       "GEOMETRY", // PostGIS extension
+	"geometrycollection": "GEOMETRY", // PostGIS extension
+
+	// SQL Server geometric types -> PostgreSQL equivalents
+	"geography": "GEOMETRY", // PostGIS extension
+
+	// Text search types
+	"tsvector": "TSVECTOR",
+	"tsquery":  "TSQUERY",
+
+	// XML type
+	"xml": "XML",
+
+	// SQL Server specific types -> PostgreSQL equivalents
+	"hierarchyid": "TEXT",
+	"sql_variant": "TEXT",
+	"cursor":      "TEXT", // Not applicable
+	"table":       "TEXT", // Not applicable
+
+	// SQLite affinity types -> PostgreSQL equivalents
+	"clob":              "TEXT",
+	"varying character": "VARCHAR",
+	"native character":  "CHAR",
+	"unsigned big int":  "BIGINT",
+
+	// MySQL specific types -> PostgreSQL equivalents
+	"enum": "TEXT", // PostgreSQL uses ENUM differently
+	"set":  "TEXT", // PostgreSQL doesn't have SET type
 }
 
 func (p *Postgres) Connect() (DataSource, error) {
@@ -244,8 +360,8 @@ func (p *Postgres) GetIndices(table string, database ...string) (fields []Index,
 
 // GetTheIndices gets the indices for a table other than the primary key.
 // This has only been implemented for postgres.
-func (p *Postgres) GetTheIndices(table string) (incides []Indices, err error) {
-	err = p.client.Select(&incides, `
+func (p *Postgres) GetTheIndices(table string, database ...string) (indices []Indices, err error) {
+	err = p.client.Select(&indices, `
 SELECT
 	i.relname AS name,
 	json_agg(a.attname) AS columns,
@@ -614,18 +730,39 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	comment := ""
 	primaryKey := ""
 	autoIncrement := ""
+
+	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
+	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
+
+	// Use parsed length and precision if field doesn't have them set
+	if f.Length == 0 && parsedLength > 0 {
+		f.Length = parsedLength
+	}
+	if f.Precision == 0 && parsedPrecision > 0 {
+		f.Precision = parsedPrecision
+	}
+
+	// Use the base data type for mapping
+	actualDataType := baseDataType
+
+	// Check if data type exists in mapping, provide fallback
+	mappedDataType, exists := dataTypes[actualDataType]
+	if !exists {
+		// Fallback to VARCHAR for unknown types
+		mappedDataType = "VARCHAR"
+		actualDataType = "varchar"
+	}
+
 	if strings.ToUpper(f.IsNullable) == "NO" {
 		nullable = "NOT NULL"
 	}
 	if f.Default != nil {
-		if v, ok := dataTypes[f.DataType]; ok {
-			if v == "BOOLEAN" {
-				switch f.Default {
-				case "0":
-					f.Default = "FALSE"
-				case "1":
-					f.Default = "TRUE"
-				}
+		if mappedDataType == "BOOLEAN" {
+			switch f.Default {
+			case "0":
+				f.Default = "FALSE"
+			case "1":
+				f.Default = "TRUE"
 			}
 		}
 		switch def := f.Default.(type) {
@@ -648,23 +785,23 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 	}
 	if f.Extra != "" && strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
 		if strings.ToUpper(f.Extra) == "AUTO_INCREMENT" {
-			f.DataType = "serial"
+			actualDataType = "serial"
 			if action != "column" {
 				primaryKey = "PRIMARY KEY"
 			}
 		}
 	}
 	fieldName := f.Name
-	switch f.DataType {
+	switch actualDataType {
 	case "string", "varchar", "character varying", "char", "character":
 		if f.Length == 0 {
 			f.Length = 255
 		}
 		changeColumn := sqlPattern[action] + "(%d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, mappedDataType, f.Length, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "smallint", "int", "integer", "bigint", "big_integer", "bigInteger", "int2", "int4", "int8":
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
 			f.Length = 11
@@ -673,10 +810,10 @@ func (p *Postgres) FieldAsString(f Field, action string) string {
 			f.Precision = 2
 		}
 		changeColumn := sqlPattern[action] + "(%d, %d) %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, mappedDataType, f.Length, f.Precision, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	default:
 		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, dataTypes[f.DataType], nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
+		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, fieldName, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal, comment), " "))
 	}
 }
 

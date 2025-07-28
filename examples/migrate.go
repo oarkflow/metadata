@@ -95,7 +95,7 @@ type Model struct {
 	Update          bool             `json:"update"`
 }
 
-func main() {
+func ma2in() {
 	var model Model
 	err := json.Unmarshal(data, &model)
 	if err != nil {

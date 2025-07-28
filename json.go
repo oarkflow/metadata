@@ -222,3 +222,13 @@ func (ds *JSONDataSource) StoreInBatches(table string, val any, size int) error 
 func (ds *JSONDataSource) Close() error {
 	return nil
 }
+
+func (ds *JSONDataSource) FieldAsString(f Field, action string) string {
+	// JSON datasource doesn't support SQL generation
+	return ""
+}
+
+func (ds *JSONDataSource) GetTheIndices(table string, database ...string) ([]Indices, error) {
+	// JSON datasource doesn't support indices
+	return []Indices{}, nil
+}

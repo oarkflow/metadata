@@ -376,3 +376,13 @@ func (p *Http) SetupAuth() error {
 		return nil
 	}
 }
+
+func (p *Http) FieldAsString(f Field, action string) string {
+	// HTTP datasource doesn't support SQL generation
+	return ""
+}
+
+func (p *Http) GetTheIndices(table string, database ...string) ([]Indices, error) {
+	// HTTP datasource doesn't support indices
+	return []Indices{}, nil
+}
