@@ -3,6 +3,7 @@ package metadata
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -216,7 +217,7 @@ func (p *MySQL) Config() Config {
 func (p *MySQL) GetDataTypeMap(dataType string) string {
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
-	
+
 	if v, ok := mysqlDataTypes[baseDataType]; ok {
 		return v
 	}
@@ -403,10 +404,15 @@ func (p *MySQL) GetType() string {
 
 func getMySQLFieldAlterDataType(table string, f Field) string {
 	dataTypes := mysqlDataTypes
-	
+
+	// Normalize nullability
+	if f.IsNullable == "" {
+		f.IsNullable = "YES"
+	}
+
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
-	
+
 	// Use parsed length and precision if field doesn't have them set
 	if f.Length == 0 && parsedLength > 0 {
 		f.Length = parsedLength
@@ -414,32 +420,34 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 	if f.Precision == 0 && parsedPrecision > 0 {
 		f.Precision = parsedPrecision
 	}
-	
+
+	// Normalize default
 	defaultVal := ""
 	if f.Default != nil {
-		if v, ok := dataTypes[baseDataType]; ok {
-			switch v1 := f.Default.(type) {
-			case bool:
-				if v1 {
-					f.Default = 1
-				} else {
-					f.Default = 0
-				}
-			}
-			if v == "BOOLEAN" {
-				def := fmt.Sprintf("%v", f.Default)
-				if strings.ToUpper(def) == "FALSE" || strings.ToUpper(def) == "NO" {
-					f.Default = "0"
-				} else if strings.ToUpper(def) == "TRUE" || strings.ToUpper(def) == "YES" {
-					f.Default = "1"
-				}
-			}
-		}
-
 		switch def := f.Default.(type) {
+		case bool:
+			if def {
+				defaultVal = "DEFAULT 1"
+			} else {
+				defaultVal = "DEFAULT 0"
+			}
 		case string:
-			if def == "CURRENT_TIMESTAMP" || strings.ToLower(def) == "true" || strings.ToLower(def) == "false" {
-				defaultVal = fmt.Sprintf("DEFAULT %s", def)
+			ld := strings.ToLower(def)
+			if contains(builtInFunctions, ld) {
+				switch ld {
+				case "now()":
+					defaultVal = "DEFAULT now()"
+				case "null":
+					defaultVal = "DEFAULT NULL"
+				case "true":
+					defaultVal = "DEFAULT 1"
+				case "false":
+					defaultVal = "DEFAULT 0"
+				default:
+					defaultVal = "DEFAULT " + def
+				}
+			} else if (ld == "0" || ld == "1") && (baseDataType == "bool" || baseDataType == "boolean" || dataTypes[baseDataType] == "TINYINT") {
+				defaultVal = "DEFAULT " + def
 			} else {
 				defaultVal = fmt.Sprintf("DEFAULT '%s'", def)
 			}
@@ -447,7 +455,7 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			defaultVal = "DEFAULT " + fmt.Sprintf("%v", def)
 		}
 	}
-	f.Comment = "COMMENT '" + f.Comment + "'"
+
 	nullable := "NULL"
 	if strings.ToUpper(f.IsNullable) == "NO" {
 		nullable = "NOT NULL"
@@ -456,6 +464,11 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 		nullable = "NULL"
 		defaultVal = "DEFAULT NULL"
 	}
+	comment := ""
+	if f.Comment != "" {
+		comment = "COMMENT '" + f.Comment + "'"
+	}
+
 	switch baseDataType {
 	case "float", "double", "decimal", "numeric":
 		if f.Length == 0 {
@@ -465,30 +478,41 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 			f.Precision = 2
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d,%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, f.Comment)
-	case "int", "integer":
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d,%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, f.Precision, nullable, defaultVal, comment)
+	case "int", "integer", "tinyint", "smallint", "mediumint", "bigint", "int2", "int4", "int8":
 		if f.Length == 0 {
-			f.Length = 11
+			if baseDataType == "tinyint" {
+				f.Length = 1
+			} else {
+				f.Length = 11
+			}
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
-	case "string", "varchar", "text", "character varying", "char":
-		if f.Length == 0 {
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, comment)
+	case "string", "varchar", "text", "character varying", "char", "character":
+		// TEXT types don't take length
+		if baseDataType != "text" && f.Length == 0 {
 			f.Length = 255
 		}
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
+			if f.Length > 0 && baseDataType != "text" {
+				return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s(%d) %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, comment)
+			}
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], nullable, defaultVal, comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, f.Comment)
+		if f.Length > 0 && baseDataType != "text" {
+			return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s(%d) %s %s %s;", table, f.Name, dataTypes[baseDataType], f.Length, nullable, defaultVal, comment)
+		}
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal, comment)
 	default:
 		if f.OldName != "" {
-			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], nullable, defaultVal, f.Comment)
+			return fmt.Sprintf("ALTER TABLE %s CHANGE %s %s %s %s %s %s;", table, f.OldName, f.Name, dataTypes[baseDataType], nullable, defaultVal, comment)
 		}
-		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal, f.Comment)
+		return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal, comment)
 	}
 }
 
@@ -504,34 +528,43 @@ func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
 func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql string
 	var query, indexQuery, primaryKeys []string
+
+	// Deterministic: sort fields by name
+	sort.SliceStable(newFields, func(i, j int) bool {
+		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
+	})
+
 	for _, newField := range newFields {
 		if strings.ToUpper(newField.Key) == "PRI" {
 			primaryKeys = append(primaryKeys, newField.Name)
 		}
 		query = append(query, p.FieldAsString(newField, "column"))
 	}
+
+	// Deterministic: ensure index names then sort indices by name
 	if len(indices) > 0 {
-		existingIndices, err := p.GetTheIndices(table)
-		if err != nil {
-			return "", err
-		}
-		fmt.Println(existingIndices)
-		for _, index := range indices {
-			if index.Name == "" {
-				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+		tmp := make([]Indices, 0, len(indices))
+		for _, idx := range indices {
+			cpy := idx
+			if cpy.Name == "" {
+				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
 			}
-			switch index.Unique {
-			case true:
-				query := fmt.Sprintf(mysqlQueries["create_unique_index"], index.Name, table,
-					strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, query)
-			case false:
-				query := fmt.Sprintf(mysqlQueries["create_index"], index.Name, table,
-					strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, query)
+			tmp = append(tmp, cpy)
+		}
+		sort.SliceStable(tmp, func(i, j int) bool {
+			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+		})
+		for _, index := range tmp {
+			if index.Unique {
+				q := fmt.Sprintf(mysqlQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, q)
+			} else {
+				q := fmt.Sprintf(mysqlQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, q)
 			}
 		}
 	}
+
 	if len(primaryKeys) > 0 {
 		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
 	}
@@ -552,33 +585,33 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 	if err != nil {
 		return "", err
 	}
-	for _, newField := range newFields {
+
+	// Deterministic: sort fields by name
+	sort.SliceStable(newFields, func(i, j int) bool {
+		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
+	})
+
+	// First pass: add/modify fields (excluding renames)
+	for _, nf := range newFields {
+		newField := nf
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
 		}
+		if newField.OldName != "" {
+			continue
+		}
 		fieldExists := false
-		if newField.OldName == "" {
-			for _, existingField := range existingFields {
-				if existingField.Name == newField.Name {
-					fieldExists = true
-					
-					// Parse data types to compare base types
-					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
-					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
-					
-					if mysqlDataTypes[existingBaseType] != mysqlDataTypes[newBaseType] ||
-						existingField.Length != newField.Length ||
-						existingField.Default != newField.Default ||
-						existingField.Comment != newField.Comment {
-						qry := p.alterFieldSQL(table, newField, existingField)
-						if qry != "" {
-							sql = append(sql, qry)
-						}
-					}
-					if existingField.IsNullable != newField.IsNullable {
-						sql = append(sql, fmt.Sprintf("%s MODIFY %s;", alterTable, p.FieldAsString(existingField, "column")))
-					}
+		for _, existingField := range existingFields {
+			if existingField.Name == newField.Name {
+				fieldExists = true
+				qry := p.alterFieldSQL(table, newField, existingField)
+				if qry != "" {
+					sql = append(sql, qry)
+				} else if existingField.IsNullable != newField.IsNullable {
+					// Only nullability changed
+					sql = append(sql, fmt.Sprintf("%s MODIFY COLUMN %s;", alterTable, p.FieldAsString(newField, "column")))
 				}
+				break
 			}
 		}
 
@@ -589,18 +622,25 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 			}
 		}
 	}
-	for _, newField := range newFields {
-		if newField.IsNullable == "" {
-			newField.IsNullable = "YES"
+
+	// Second pass: handle renames deterministically by old name
+	var renames []Field
+	for _, nf := range newFields {
+		if nf.OldName != "" {
+			renames = append(renames, nf)
 		}
-		if newField.OldName != "" {
-			for _, existingField := range existingFields {
-				if existingField.Name == newField.Name {
-					qry := p.alterFieldSQL(table, newField, existingField)
-					if qry != "" {
-						sql = append(sql, qry)
-					}
+	}
+	sort.SliceStable(renames, func(i, j int) bool {
+		return strings.ToLower(renames[i].OldName) < strings.ToLower(renames[j].OldName)
+	})
+	for _, newField := range renames {
+		for _, existingField := range existingFields {
+			if existingField.Name == newField.OldName {
+				qry := p.alterFieldSQL(table, newField, existingField)
+				if qry != "" {
+					sql = append(sql, qry)
 				}
+				break
 			}
 		}
 	}

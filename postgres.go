@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -223,7 +224,7 @@ func (p *Postgres) GetSources(database ...string) (tables []Source, err error) {
 func (p *Postgres) GetDataTypeMap(dataType string) string {
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
-	
+
 	if v, ok := postgresDataTypes[baseDataType]; ok {
 		return v
 	}
@@ -456,10 +457,10 @@ func (p *Postgres) GetType() string {
 
 func getPostgresFieldAlterDataType(table string, f Field) string {
 	dataTypes := postgresDataTypes
-	
+
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
-	
+
 	// Use parsed length and precision if field doesn't have them set
 	if f.Length == 0 && parsedLength > 0 {
 		f.Length = parsedLength
@@ -467,7 +468,7 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 	if f.Precision == 0 && parsedPrecision > 0 {
 		f.Precision = parsedPrecision
 	}
-	
+
 	defaultVal := ""
 	if f.Default != nil {
 		if v, ok := dataTypes[baseDataType]; ok {
@@ -554,6 +555,12 @@ func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
 func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
 	var sql string
 	var query, comments, indexQuery, primaryKeys []string
+
+	// Deterministic: sort fields by name
+	sort.SliceStable(newFields, func(i, j int) bool {
+		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
+	})
+
 	for _, field := range newFields {
 		fieldName := field.Name
 		if strings.ToUpper(field.Key) == "PRI" {
@@ -565,23 +572,31 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 			comments = append(comments, comment)
 		}
 	}
+
+	// Deterministic: ensure index names then sort indices by name
 	if len(indices) > 0 {
-		for _, index := range indices {
-			if index.Name == "" {
-				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+		tmp := make([]Indices, 0, len(indices))
+		for _, idx := range indices {
+			cpy := idx
+			if cpy.Name == "" {
+				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
 			}
-			switch index.Unique {
-			case true:
-				query := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table,
-					strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, query)
-			case false:
-				query := fmt.Sprintf(postgresQueries["create_index"], index.Name, table,
-					strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, query)
+			tmp = append(tmp, cpy)
+		}
+		sort.SliceStable(tmp, func(i, j int) bool {
+			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+		})
+		for _, index := range tmp {
+			if index.Unique {
+				q := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, q)
+			} else {
+				q := fmt.Sprintf(postgresQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
+				indexQuery = append(indexQuery, q)
 			}
 		}
 	}
+
 	if len(primaryKeys) > 0 {
 		query = append(query, " PRIMARY KEY ("+strings.Join(primaryKeys, ", ")+")")
 	}
@@ -609,41 +624,47 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 	if err != nil {
 		return "", err
 	}
-	for _, newField := range newFields {
+
+	// Deterministic: sort fields by name
+	sort.SliceStable(newFields, func(i, j int) bool {
+		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
+	})
+
+	// First pass: add/modify fields (excluding renames)
+	for _, nf := range newFields {
+		newField := nf
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
 		}
+		if newField.OldName != "" {
+			continue
+		}
+		fieldName := newField.Name
 		fieldExists := false
-		if newField.OldName == "" {
-			fieldName := newField.Name
-			for _, existingField := range existingFields {
-				if existingField.Name == fieldName {
-					fieldExists = true
-					
-					// Parse data types to compare base types
-					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
-					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
-					
-					if postgresDataTypes[existingBaseType] != postgresDataTypes[newBaseType] ||
-						existingField.Length != newField.Length ||
-						existingField.Default != newField.Default {
-						qry := p.alterFieldSQL(table, newField, existingField)
-						if qry != "" {
-							sql = append(sql, qry)
-						}
-					}
-					if existingField.IsNullable != newField.IsNullable {
-						if newField.IsNullable == "YES" {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, fieldName))
-						} else {
-							sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, fieldName))
-						}
-					}
+		for _, existingField := range existingFields {
+			if existingField.Name == fieldName {
+				fieldExists = true
 
-					if existingField.Comment != newField.Comment {
-						sql = append(sql, "COMMENT ON COLUMN "+table+"."+fieldName+" IS '"+strings.ReplaceAll(newField.Comment, "'", `"`)+"';")
+				// Prefer canonical SQL comparison for data type/length/default/etc.
+				qry := p.alterFieldSQL(table, newField, existingField)
+				if qry != "" {
+					sql = append(sql, qry)
+				}
+
+				// Nullability delta (handled separately)
+				if existingField.IsNullable != newField.IsNullable {
+					if newField.IsNullable == "YES" {
+						sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, fieldName))
+					} else {
+						sql = append(sql, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, fieldName))
 					}
 				}
+
+				// Comment delta (deterministic)
+				if existingField.Comment != newField.Comment {
+					sql = append(sql, "COMMENT ON COLUMN "+table+"."+fieldName+" IS '"+strings.ReplaceAll(newField.Comment, "'", `"`)+"';")
+				}
+				break
 			}
 		}
 		if !fieldExists {
@@ -653,51 +674,77 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 			}
 		}
 	}
-	for _, newField := range newFields {
-		fieldName := newField.Name
-		if newField.OldName != "" {
-			sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+fieldName+`";`)
+
+	// Second pass: handle renames deterministically by OldName
+	var renames []Field
+	for _, nf := range newFields {
+		if nf.OldName != "" {
+			renames = append(renames, nf)
 		}
 	}
-	// create a map to keep track of existing indices by name
+	sort.SliceStable(renames, func(i, j int) bool {
+		return strings.ToLower(renames[i].OldName) < strings.ToLower(renames[j].OldName)
+	})
+	for _, newField := range renames {
+		fieldName := newField.Name
+		sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+fieldName+`";`)
+	}
+
+	// Create a map to keep track of existing indices by name
 	existingIndicesMap := make(map[string]Indices)
 	for _, existingIndex := range existingIndices {
 		existingIndicesMap[existingIndex.Name] = existingIndex
 	}
-	for _, newIndex := range newIndices {
-		// if new index has no name, generate one
-		if newIndex.Name == "" {
-			newIndex.Name = "idx_" + table + "_" + strings.Join(newIndex.Columns, "_")
+
+	// Deterministic: ensure new index names and sort by name
+	if len(newIndices) > 0 {
+		tmp := make([]Indices, 0, len(newIndices))
+		for _, idx := range newIndices {
+			cpy := idx
+			if cpy.Name == "" {
+				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+			}
+			tmp = append(tmp, cpy)
 		}
-		existingIndex, indexExists := existingIndicesMap[newIndex.Name]
-		if indexExists {
-			// compare the columns
-			// if they are different, drop the index and create a new one
-			if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) {
-				sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
-				switch newIndex.Unique {
-				case true:
+		sort.SliceStable(tmp, func(i, j int) bool {
+			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+		})
+		for _, newIndex := range tmp {
+			existingIndex, indexExists := existingIndicesMap[newIndex.Name]
+			if indexExists {
+				// if columns differ, drop and recreate
+				if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) || existingIndex.Unique != newIndex.Unique {
+					sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+					if newIndex.Unique {
+						sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+					} else {
+						sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+					}
+				}
+				delete(existingIndicesMap, newIndex.Name)
+			} else {
+				// New index
+				if newIndex.Unique {
 					sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
-				case false:
+				} else {
 					sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
 				}
 			}
-			// Remove existing index from map
-			delete(existingIndicesMap, newIndex.Name)
-		} else {
-			// New index with provided name and columns
-			switch newIndex.Unique {
-			case true:
-				sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
-			case false:
-				sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
-			}
 		}
 	}
-	// drop any remaining indices in the map
-	for _, existingIndex := range existingIndicesMap {
-		sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+
+	// Drop any remaining indices, deterministically sorted by name
+	if len(existingIndicesMap) > 0 {
+		names := make([]string, 0, len(existingIndicesMap))
+		for name := range existingIndicesMap {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			sql = append(sql, fmt.Sprintf("DROP INDEX %s;", name))
+		}
 	}
+
 	if len(sql) > 0 {
 		return strings.Join(sql, ""), nil
 	}
