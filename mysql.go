@@ -516,13 +516,111 @@ func getMySQLFieldAlterDataType(table string, f Field) string {
 	}
 }
 
-func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
-	newSQL := getMySQLFieldAlterDataType(table, f)
-	existingSQL := getMySQLFieldAlterDataType(table, existingField)
-	if newSQL != existingSQL {
-		return newSQL
+// fieldsEqual compares two fields to determine if they are functionally equivalent
+func fieldsEqual(newField, existingField Field) bool {
+	// Compare basic properties
+	if newField.Name != existingField.Name {
+		return false
 	}
-	return ""
+	if strings.ToUpper(newField.IsNullable) != strings.ToUpper(existingField.IsNullable) {
+		return false
+	}
+	// Compare keys (PRI, UNI, MUL) - but be more lenient
+	// If existing has MUL (indexed) but new doesn't specify a key, consider them compatible
+	// Only consider it a difference if the keys are explicitly different (e.g., PRI vs UNI)
+	newKey := strings.ToUpper(strings.TrimSpace(newField.Key))
+	existingKey := strings.ToUpper(strings.TrimSpace(existingField.Key))
+
+	if newKey != "" && existingKey != "" && newKey != existingKey {
+		return false
+	}
+	// If new key is empty but existing has MUL, this is likely just an indexed column
+	// and shouldn't be considered a difference for ALTER purposes
+
+	// Parse data types to compare base types
+	newBaseType, newLength, newPrecision := parseDataTypeWithParameters(newField.DataType)
+	existingBaseType, existingLength, existingPrecision := parseDataTypeWithParameters(existingField.DataType)
+
+	if strings.ToLower(newBaseType) != strings.ToLower(existingBaseType) {
+		return false
+	}
+
+	// Compare lengths (only for types that use length)
+	// If new length is 0 (not specified), it means use default, so don't compare
+	if newLength > 0 && existingLength > 0 && newLength != existingLength {
+		// For integer types, length is display width and doesn't affect storage, so ignore differences
+		if newBaseType == "varchar" || newBaseType == "char" {
+			return false
+		}
+		// For integer types, ignore length differences as they are just display width
+		if !strings.Contains(newBaseType, "int") {
+			return false
+		}
+	}
+
+	// Compare precision (for decimal/numeric types)
+	if newPrecision != existingPrecision && (newBaseType == "decimal" || newBaseType == "numeric") {
+		return false
+	}
+
+	// Compare defaults (normalize for comparison)
+	newDefault := normalizeDefault(newField.Default)
+	existingDefault := normalizeDefault(existingField.Default)
+	if newDefault != existingDefault {
+		return false
+	}
+
+	// Compare comments (only if both have comments)
+	// If existing field has no comment, don't consider new comments as a difference
+	// This prevents unnecessary ALTER statements for adding comments to existing tables
+	newHasComment := strings.TrimSpace(newField.Comment) != ""
+	existingHasComment := strings.TrimSpace(existingField.Comment) != ""
+
+	if existingHasComment && newHasComment {
+		// Both have comments, compare them
+		if newField.Comment != existingField.Comment {
+			return false
+		}
+	} else if existingHasComment && !newHasComment {
+		// Existing has comment but new doesn't - this is a difference
+		return false
+	}
+	// If existing has no comment, ignore comment differences (don't trigger ALTER for adding comments)
+
+	// Compare extra properties (like AUTO_INCREMENT)
+	if strings.ToUpper(newField.Extra) != strings.ToUpper(existingField.Extra) {
+		return false
+	}
+
+	return true
+}
+
+// normalizeDefault normalizes default values for comparison
+func normalizeDefault(def any) string {
+	if def == nil {
+		return ""
+	}
+	switch v := def.(type) {
+	case string:
+		// Handle built-in functions
+		lower := strings.ToLower(v)
+		if contains(builtInFunctions, lower) {
+			return lower
+		}
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
+	// First check if fields are functionally equivalent
+	if fieldsEqual(f, existingField) {
+		return ""
+	}
+
+	// Fields are different, generate alter SQL
+	return getMySQLFieldAlterDataType(table, f)
 }
 
 func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
@@ -586,6 +684,12 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 		return "", err
 	}
 
+	// Get existing indices
+	existingIndices, err := p.GetTheIndices(table)
+	if err != nil {
+		return "", err
+	}
+
 	// Deterministic: sort fields by name
 	sort.SliceStable(newFields, func(i, j int) bool {
 		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
@@ -645,10 +749,78 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 		}
 	}
 
+	// Third pass: handle indices - only create indices that don't already exist
+	if len(indices) > 0 {
+		// Deterministic: ensure index names then sort indices by name
+		tmp := make([]Indices, 0, len(indices))
+		for _, idx := range indices {
+			cpy := idx
+			if cpy.Name == "" {
+				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+			}
+			tmp = append(tmp, cpy)
+		}
+		sort.SliceStable(tmp, func(i, j int) bool {
+			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+		})
+
+		for _, newIndex := range tmp {
+			indexExists := false
+
+			// Check if index already exists (by name or by columns)
+			for _, existingIndex := range existingIndices {
+				// First check by name
+				if strings.EqualFold(existingIndex.Name, newIndex.Name) {
+					if indicesEqual(existingIndex, newIndex) {
+						indexExists = true
+						break
+					}
+				}
+				// Also check by columns (for unnamed indices that might match)
+				if indicesEqual(existingIndex, newIndex) {
+					indexExists = true
+					break
+				}
+			}
+
+			// Only create index if it doesn't exist
+			if !indexExists {
+				var indexSQL string
+				if newIndex.Unique {
+					indexSQL = fmt.Sprintf(mysqlQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
+				} else {
+					indexSQL = fmt.Sprintf(mysqlQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
+				}
+				sql = append(sql, indexSQL)
+			}
+		}
+	}
+
 	if len(sql) > 0 {
 		return strings.Join(sql, ""), nil
 	}
 	return "", nil
+}
+
+// indicesEqual compares two indices to determine if they are functionally equivalent
+func indicesEqual(existing, new Indices) bool {
+	// Compare uniqueness
+	if existing.Unique != new.Unique {
+		return false
+	}
+
+	// Compare columns (order matters for index)
+	if len(existing.Columns) != len(new.Columns) {
+		return false
+	}
+
+	for i, col := range existing.Columns {
+		if col != new.Columns[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (p *MySQL) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {

@@ -95,7 +95,7 @@ type Model struct {
 	Update          bool             `json:"update"`
 }
 
-func ma2in() {
+func main() {
 	var model Model
 	err := json.Unmarshal(data, &model)
 	if err != nil {
@@ -114,11 +114,42 @@ func ma2in() {
 	if err != nil {
 		panic(err)
 	}
+	// First, let's check if the table exists and get its current structure
+	existingFields, err := connector.GetFields(model.Name)
+	if err != nil {
+		fmt.Printf("Error getting existing fields: %v\n", err)
+	} else {
+		fmt.Printf("Existing fields: %+v\n", existingFields)
+	}
+
+	// Get existing indices
+	existingIndices, err := connector.GetTheIndices(model.Name)
+	if err != nil {
+		fmt.Printf("Error getting existing indices: %v\n", err)
+	} else {
+		fmt.Printf("Existing indices: %+v\n", existingIndices)
+	}
+
+	// Debug: Check field comparison for transactionId
+	for _, existingField := range existingFields {
+		if existingField.Name == "transactionId" {
+			for _, newField := range model.Fields {
+				if newField.Name == "transactionId" {
+					fmt.Printf("Comparing transactionId:\n")
+					fmt.Printf("  Existing: %+v\n", existingField)
+					fmt.Printf("  New: %+v\n", newField)
+					break
+				}
+			}
+			break
+		}
+	}
+
 	sql, err := connector.GenerateSQL(model.Name, model.Fields, model.Constraints.Indices...)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(sql)
+	fmt.Printf("Generated SQL: %s\n", sql)
 
 	/*sqlParts := strings.Split(sql, ";")
 	for _, sq := range sqlParts {

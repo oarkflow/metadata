@@ -3,6 +3,7 @@ package metadata
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -229,7 +230,7 @@ func (p *MsSQL) Config() Config {
 func (p *MsSQL) GetDataTypeMap(dataType string) string {
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
-	
+
 	if v, ok := mssqlDataTypes[baseDataType]; ok {
 		return v
 	}
@@ -457,10 +458,10 @@ func (p *MsSQL) GetType() string {
 
 func getMSSQLFieldAlterDataType(table string, f Field) string {
 	dataTypes := mssqlDataTypes
-	
+
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
-	
+
 	// Use parsed length and precision if field doesn't have them set
 	if f.Length == 0 && parsedLength > 0 {
 		f.Length = parsedLength
@@ -468,7 +469,7 @@ func getMSSQLFieldAlterDataType(table string, f Field) string {
 	if f.Precision == 0 && parsedPrecision > 0 {
 		f.Precision = parsedPrecision
 	}
-	
+
 	defaultVal := ""
 	if f.Default != nil {
 		switch def := f.Default.(type) {
@@ -521,12 +522,13 @@ func getMSSQLFieldAlterDataType(table string, f Field) string {
 }
 
 func (p *MsSQL) alterFieldSQL(table string, f, existingField Field) string {
-	newSQL := getMSSQLFieldAlterDataType(table, f)
-	existingSQL := getMSSQLFieldAlterDataType(table, existingField)
-	if newSQL != existingSQL {
-		return newSQL
+	// First check if fields are functionally equivalent
+	if fieldsEqual(f, existingField) {
+		return ""
 	}
-	return ""
+
+	// Fields are different, generate alter SQL
+	return getMSSQLFieldAlterDataType(table, f)
 }
 
 func (p *MsSQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
@@ -575,33 +577,39 @@ func (p *MsSQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 	if err != nil {
 		return "", err
 	}
-	for _, newField := range newFields {
+
+	// Get existing indices
+	existingIndices, err := p.GetTheIndices(table)
+	if err != nil {
+		return "", err
+	}
+
+	// Deterministic: sort fields by name
+	sort.SliceStable(newFields, func(i, j int) bool {
+		return strings.ToLower(newFields[i].Name) < strings.ToLower(newFields[j].Name)
+	})
+
+	// First pass: add/modify fields (excluding renames)
+	for _, nf := range newFields {
+		newField := nf
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
 		}
+		if newField.OldName != "" {
+			continue
+		}
 		fieldExists := false
-		if newField.OldName == "" {
-			for _, existingField := range existingFields {
-				if existingField.Name == newField.Name {
-					fieldExists = true
-					
-					// Parse data types to compare base types
-					existingBaseType, _, _ := parseDataTypeWithParameters(existingField.DataType)
-					newBaseType, _, _ := parseDataTypeWithParameters(newField.DataType)
-					
-					if mssqlDataTypes[existingBaseType] != mssqlDataTypes[newBaseType] ||
-						existingField.Length != newField.Length ||
-						existingField.Default != newField.Default ||
-						existingField.Comment != newField.Comment {
-						qry := p.alterFieldSQL(table, newField, existingField)
-						if qry != "" {
-							sql = append(sql, qry)
-						}
-					}
-					if existingField.IsNullable != newField.IsNullable {
-						sql = append(sql, fmt.Sprintf("%s ALTER COLUMN %s;", alterTable, p.FieldAsString(existingField, "column")))
-					}
+		for _, existingField := range existingFields {
+			if existingField.Name == newField.Name {
+				fieldExists = true
+				qry := p.alterFieldSQL(table, newField, existingField)
+				if qry != "" {
+					sql = append(sql, qry)
+				} else if existingField.IsNullable != newField.IsNullable {
+					// Only nullability changed
+					sql = append(sql, fmt.Sprintf("%s ALTER COLUMN %s;", alterTable, p.FieldAsString(newField, "column")))
 				}
+				break
 			}
 		}
 
@@ -609,6 +617,75 @@ func (p *MsSQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 			qry := alterTable + " " + p.FieldAsString(newField, "add_column") + ";"
 			if qry != "" {
 				sql = append(sql, qry)
+			}
+		}
+	}
+
+	// Second pass: handle renames deterministically by old name
+	var renames []Field
+	for _, nf := range newFields {
+		if nf.OldName != "" {
+			renames = append(renames, nf)
+		}
+	}
+	sort.SliceStable(renames, func(i, j int) bool {
+		return strings.ToLower(renames[i].OldName) < strings.ToLower(renames[j].OldName)
+	})
+	for _, newField := range renames {
+		for _, existingField := range existingFields {
+			if existingField.Name == newField.OldName {
+				qry := p.alterFieldSQL(table, newField, existingField)
+				if qry != "" {
+					sql = append(sql, qry)
+				}
+				break
+			}
+		}
+	}
+
+	// Third pass: handle indices - only create indices that don't already exist
+	if len(indices) > 0 {
+		// Deterministic: ensure index names then sort indices by name
+		tmp := make([]Indices, 0, len(indices))
+		for _, idx := range indices {
+			cpy := idx
+			if cpy.Name == "" {
+				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+			}
+			tmp = append(tmp, cpy)
+		}
+		sort.SliceStable(tmp, func(i, j int) bool {
+			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+		})
+
+		for _, newIndex := range tmp {
+			indexExists := false
+
+			// Check if index already exists (by name or by columns)
+			for _, existingIndex := range existingIndices {
+				// First check by name
+				if strings.EqualFold(existingIndex.Name, newIndex.Name) {
+					if indicesEqual(existingIndex, newIndex) {
+						indexExists = true
+						break
+					}
+				}
+				// Also check by columns (for unnamed indices that might match)
+				if indicesEqual(existingIndex, newIndex) {
+					indexExists = true
+					break
+				}
+			}
+
+			// Only create index if it doesn't exist
+			if !indexExists {
+				var indexSQL string
+				if newIndex.Unique {
+					indexSQL = fmt.Sprintf(mssqlQueries["create_unique_index"], newIndex.Name, "["+table+"]", "["+strings.Join(newIndex.Columns, "], [")+"]")
+				} else {
+					indexSQL = fmt.Sprintf(mssqlQueries["create_index"], newIndex.Name, "["+table+"]", "["+strings.Join(newIndex.Columns, "], [")+"]")
+				}
+				sql = append(sql, indexSQL)
 			}
 		}
 	}

@@ -544,12 +544,13 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 }
 
 func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
-	newSQL := getPostgresFieldAlterDataType(table, f)
-	existingSQL := getPostgresFieldAlterDataType(table, existingField)
-	if newSQL != existingSQL {
-		return newSQL
+	// First check if fields are functionally equivalent
+	if fieldsEqual(f, existingField) {
+		return ""
 	}
-	return ""
+
+	// Fields are different, generate alter SQL
+	return getPostgresFieldAlterDataType(table, f)
 }
 
 func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
