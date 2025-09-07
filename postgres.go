@@ -343,7 +343,7 @@ func (p *Postgres) GetForeignKeys(table string, database ...string) (fields []Fo
 	if len(database) > 0 {
 		db = database[0]
 	}
-	err = p.client.Select(&fields, `select kcu.column_name as "name", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = :catalog AND kcu.table_schema = 'public' AND kcu.table_name = :table_name order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, map[string]any{
+	err = p.client.Select(&fields, `select kcu.constraint_name as "name", kcu.column_name as "column", rel_kcu.table_name as referenced_table, rel_kcu.column_name as referenced_column from information_schema.table_constraints tco join information_schema.key_column_usage kcu           on tco.constraint_schema = kcu.constraint_schema           and tco.constraint_name = kcu.constraint_name join information_schema.referential_constraints rco           on tco.constraint_schema = rco.constraint_schema           and tco.constraint_name = rco.constraint_name join information_schema.key_column_usage rel_kcu           on rco.unique_constraint_schema = rel_kcu.constraint_schema           and rco.unique_constraint_name = rel_kcu.constraint_name           and kcu.ordinal_position = rel_kcu.ordinal_position where tco.constraint_type = 'FOREIGN KEY' and kcu.table_catalog = :catalog AND kcu.table_schema = 'public' AND kcu.table_name = :table_name order by kcu.table_schema,          kcu.table_name,          kcu.ordinal_position;`, map[string]any{
 		"catalog":    db,
 		"table_name": table,
 	})
@@ -543,9 +543,131 @@ func getPostgresFieldAlterDataType(table string, f Field) string {
 	}
 }
 
+// normalizePostgresDataType normalizes PostgreSQL data types to their canonical form for comparison
+func normalizePostgresDataType(dataType string) string {
+	// Parse the data type to get the base type
+	baseType, _, _ := parseDataTypeWithParameters(dataType)
+
+	// Map common aliases to canonical forms
+	switch strings.ToLower(baseType) {
+	case "varchar", "character varying":
+		return "varchar"
+	case "char", "character":
+		return "char"
+	case "int", "integer":
+		return "integer"
+	case "int2":
+		return "smallint"
+	case "int4":
+		return "integer"
+	case "int8":
+		return "bigint"
+	case "float", "real":
+		return "real"
+	case "double", "double precision":
+		return "double precision"
+	case "decimal", "numeric":
+		return "numeric"
+	case "bool", "boolean":
+		return "boolean"
+	case "timestamp", "timestamp without time zone":
+		return "timestamp"
+	case "timestamptz", "timestamp with time zone":
+		return "timestamp with time zone"
+	case "time", "time without time zone":
+		return "time"
+	case "timetz", "time with time zone":
+		return "time with time zone"
+	default:
+		return strings.ToLower(baseType)
+	}
+}
+
+// postgresFieldsEqual compares two fields for PostgreSQL, handling data type normalization
+func postgresFieldsEqual(newField, existingField Field) bool {
+	// Compare basic properties
+	if newField.Name != existingField.Name {
+		return false
+	}
+	if !strings.EqualFold(newField.IsNullable, existingField.IsNullable) {
+		return false
+	}
+
+	// Compare keys (PRI, UNI, MUL) - but be more lenient
+	newKey := strings.ToUpper(strings.TrimSpace(newField.Key))
+	existingKey := strings.ToUpper(strings.TrimSpace(existingField.Key))
+
+	if newKey != "" && existingKey != "" && newKey != existingKey {
+		return false
+	}
+
+	// Parse and normalize data types for comparison
+	newNormalizedType := normalizePostgresDataType(newField.DataType)
+	existingNormalizedType := normalizePostgresDataType(existingField.DataType)
+
+	if newNormalizedType != existingNormalizedType {
+		return false
+	}
+
+	// Compare lengths (only for types that use length)
+	_, newLength, newPrecision := parseDataTypeWithParameters(newField.DataType)
+	_, existingLength, existingPrecision := parseDataTypeWithParameters(existingField.DataType)
+
+	// Compare lengths (only for types that use length)
+	if newLength > 0 && existingLength > 0 && newLength != existingLength {
+		// For varchar/char types, length differences matter
+		if newNormalizedType == "varchar" || newNormalizedType == "char" {
+			return false
+		}
+	}
+
+	// Compare precision (for decimal/numeric types)
+	if newPrecision != existingPrecision && (newNormalizedType == "numeric" || newNormalizedType == "decimal") {
+		return false
+	}
+
+	// Compare defaults (normalize for comparison)
+	newDefault := normalizeDefault(newField.Default)
+	existingDefault := normalizeDefault(existingField.Default)
+	if newDefault != existingDefault {
+		return false
+	}
+
+	// Compare comments (only if both have comments)
+	newHasComment := strings.TrimSpace(newField.Comment) != ""
+	existingHasComment := strings.TrimSpace(existingField.Comment) != ""
+
+	if existingHasComment && newHasComment {
+		if newField.Comment != existingField.Comment {
+			return false
+		}
+	} else if existingHasComment && !newHasComment {
+		return false
+	}
+
+	// Compare extra properties (like AUTO_INCREMENT)
+	if !strings.EqualFold(newField.Extra, existingField.Extra) {
+		return false
+	}
+
+	return true
+}
+
+// getExistingConstraints retrieves all existing constraint names for a table
+func (p *Postgres) getExistingConstraints(table string) ([]string, error) {
+	var constraints []string
+	err := p.client.Select(&constraints, `
+		SELECT conname
+		FROM pg_constraint c
+		JOIN pg_class t ON c.conrelid = t.oid
+		WHERE t.relname = $1 AND t.relkind = 'r'
+		AND c.contype IN ('c', 'f', 'p', 'u')`, table) // Only check, foreign key, primary key, and unique constraints
+	return constraints, err
+}
+
 func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
-	// First check if fields are functionally equivalent
-	if fieldsEqual(f, existingField) {
+	// First check if fields are functionally equivalent using PostgreSQL-specific comparison
+	if postgresFieldsEqual(f, existingField) {
 		return ""
 	}
 
@@ -630,10 +752,10 @@ func (p *Postgres) createSQL(table string, newFields []Field, constraints *Const
 		// Handle foreign key constraints
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
 			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+				table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
 			if fk.OnDelete != "" {
 				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
 			}
@@ -671,6 +793,11 @@ func (p *Postgres) alterSQL(table string, newFields []Field, constraints *Constr
 	existingIndices, err := p.GetTheIndices(table)
 	if err != nil {
 		return "", err
+	}
+
+	// If no constraints are provided, don't generate any constraint-related SQL
+	if constraints == nil {
+		constraints = &Constraint{}
 	}
 
 	// Deterministic: sort fields by name
@@ -738,12 +865,6 @@ func (p *Postgres) alterSQL(table string, newFields []Field, constraints *Constr
 		sql = append(sql, alterTable+` RENAME COLUMN "`+newField.OldName+`" TO "`+fieldName+`";`)
 	}
 
-	// Create a map to keep track of existing indices by name
-	existingIndicesMap := make(map[string]Indices)
-	for _, existingIndex := range existingIndices {
-		existingIndicesMap[existingIndex.Name] = existingIndex
-	}
-
 	// Handle constraints
 	if constraints != nil {
 		// Handle indices
@@ -760,20 +881,22 @@ func (p *Postgres) alterSQL(table string, newFields []Field, constraints *Constr
 				return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
 			})
 			for _, newIndex := range tmp {
-				existingIndex, indexExists := existingIndicesMap[newIndex.Name]
-				if indexExists {
-					// if columns differ, drop and recreate
-					if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) || existingIndex.Unique != newIndex.Unique {
-						sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
-						if newIndex.Unique {
-							sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+				// Check if index already exists with same name and properties
+				indexExists := false
+				for _, existingIndex := range existingIndices {
+					if strings.EqualFold(existingIndex.Name, newIndex.Name) {
+						if reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) && existingIndex.Unique == newIndex.Unique {
+							indexExists = true
 						} else {
-							sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+							// Index exists but is different - drop and recreate
+							sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
 						}
+						break
 					}
-					delete(existingIndicesMap, newIndex.Name)
-				} else {
-					// New index
+				}
+
+				if !indexExists {
+					// New index or needs recreation
 					if newIndex.Unique {
 						sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
 					} else {
@@ -783,60 +906,106 @@ func (p *Postgres) alterSQL(table string, newFields []Field, constraints *Constr
 			}
 		}
 
-		// Handle unique constraints
+		// Get existing foreign keys to check for duplicates
+		existingForeignKeys, err := p.GetForeignKeys(table)
+		if err != nil {
+			// If we can't get existing foreign keys, skip constraint checks
+			existingForeignKeys = []ForeignKey{}
+		}
+
+		// Get existing constraints to check for duplicates
+		existingConstraints, err := p.getExistingConstraints(table)
+		if err != nil {
+			// If we can't get existing constraints, skip constraint checks
+			existingConstraints = []string{}
+		}
+
+		// Handle unique constraints - check if they already exist
 		for _, unique := range constraints.UniqueKeys {
 			if unique.Name == "" {
 				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, unique.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle check constraints
+		// Handle check constraints - check if they already exist
 		for _, check := range constraints.CheckKeys {
 			if check.Name == "" {
 				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, check.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle primary key constraints
+		// Handle primary key constraints - check if they already exist
 		for _, pk := range constraints.PrimaryKeys {
 			if pk.Name == "" {
 				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, pk.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle foreign key constraints
+		// Handle foreign key constraints - check if they already exist
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
-			if fk.OnDelete != "" {
-				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
-			}
-			if fk.OnUpdate != "" {
-				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
-			}
-			q += ";"
-			sql = append(sql, q)
-		}
-	}
 
-	// Drop any remaining indices, deterministically sorted by name
-	if len(existingIndicesMap) > 0 {
-		names := make([]string, 0, len(existingIndicesMap))
-		for name := range existingIndicesMap {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			sql = append(sql, fmt.Sprintf("DROP INDEX %s;", name))
+			// Check if foreign key already exists
+			fkExists := false
+			for _, existingFK := range existingForeignKeys {
+				if strings.EqualFold(existingFK.Name, fk.Name) ||
+					(strings.EqualFold(existingFK.ReferencedTable, fk.ReferencedTable) &&
+						reflect.DeepEqual(existingFK.ReferencedColumn, fk.ReferencedColumn)) {
+					fkExists = true
+					break
+				}
+			}
+
+			if !fkExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+					table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
+				if fk.OnDelete != "" {
+					q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+				}
+				if fk.OnUpdate != "" {
+					q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+				}
+				q += ";"
+				sql = append(sql, q)
+			}
 		}
 	}
 

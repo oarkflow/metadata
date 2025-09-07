@@ -16,7 +16,7 @@ func getDatabaseConfigs() map[string]metadata.Config {
 			Port:     3306,
 			Driver:   "mysql",
 			Username: "root",
-			Password: "root",
+			Password: "Password@123",
 			Database: "test_db",
 		},
 		"postgresql": {
@@ -109,8 +109,9 @@ func basicExample() {
 		ForeignKeys: []metadata.ForeignKey{
 			{
 				Name:             "fk_department",
+				Column:           []string{"department_id"},
 				ReferencedTable:  "departments",
-				ReferencedColumn: "id",
+				ReferencedColumn: []string{"id"},
 				OnDelete:         "SET NULL",
 				OnUpdate:         "CASCADE",
 			},
@@ -280,15 +281,17 @@ func complexExample() {
 		ForeignKeys: []metadata.ForeignKey{
 			{
 				Name:             "fk_category",
+				Column:           []string{"category_id"},
 				ReferencedTable:  "categories",
-				ReferencedColumn: "id",
+				ReferencedColumn: []string{"id"},
 				OnDelete:         "RESTRICT",
 				OnUpdate:         "CASCADE",
 			},
 			{
 				Name:             "fk_supplier",
+				Column:           []string{"supplier_id"},
 				ReferencedTable:  "suppliers",
-				ReferencedColumn: "id",
+				ReferencedColumn: []string{"id"},
 				OnDelete:         "SET NULL",
 				OnUpdate:         "CASCADE",
 			},

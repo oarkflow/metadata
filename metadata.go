@@ -75,11 +75,12 @@ type Field struct {
 var space = regexp.MustCompile(`\s+`)
 
 type ForeignKey struct {
-	Name             string `json:"name" gorm:"column:name"`
-	ReferencedTable  string `json:"referenced_table" gorm:"column:referenced_table"`
-	ReferencedColumn string `json:"referenced_column" gorm:"column:referenced_column"`
-	OnDelete         string `json:"on_delete" gorm:"column:on_delete"`
-	OnUpdate         string `json:"on_update" gorm:"column:on_update"`
+	Name             string   `json:"name" gorm:"column:name"`
+	Column           []string `json:"column" gorm:"type:text column:column"`
+	ReferencedTable  string   `json:"referenced_table" gorm:"column:referenced_table"`
+	ReferencedColumn []string `json:"referenced_column" gorm:"type:text column:referenced_column"`
+	OnDelete         string   `json:"on_delete" gorm:"column:on_delete"`
+	OnUpdate         string   `json:"on_update" gorm:"column:on_update"`
 }
 
 type UniqueConstraint struct {

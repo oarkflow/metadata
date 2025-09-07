@@ -3,11 +3,12 @@ package metadata
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/dbresolver"
+	"github.com/oarkflow/squealx/drivers/sqlite"
 
-	// "github.com/oarkflow/squealx/drivers/sqlite" // TODO: Enable when sqlite driver is available
 	"github.com/oarkflow/squealx/orm"
 )
 
@@ -177,26 +178,22 @@ var sqliteDataTypes = map[string]string{
 }
 
 func (p *SQLite) Connect() (DataSource, error) {
-	// TODO: Implement when SQLite driver is available
-	return nil, fmt.Errorf("SQLite driver not available")
-	/*
-		if p.client == nil {
-			db1, err := sqlite.Open(p.dsn, p.id)
-			if err != nil {
-				return nil, err
-			}
-			p.client, err = dbresolver.New(dbresolver.WithMasterDBs(db1), dbresolver.WithReadWritePolicy(dbresolver.ReadWrite))
-			if err != nil {
-				return nil, err
-			}
-			p.client.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
-			p.client.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
-			p.client.SetMaxOpenConns(p.pooling.MaxOpenCons)
-			p.client.SetMaxIdleConns(p.pooling.MaxIdleCons)
-			p.client.SetDefaultDB(p.id)
+	if p.client == nil {
+		db1, err := sqlite.Open(p.dsn, p.id)
+		if err != nil {
+			return nil, err
 		}
-		return p, nil
-	*/
+		p.client, err = dbresolver.New(dbresolver.WithMasterDBs(db1), dbresolver.WithReadWritePolicy(dbresolver.ReadWrite))
+		if err != nil {
+			return nil, err
+		}
+		p.client.SetConnMaxLifetime(time.Duration(p.pooling.MaxLifetime) * time.Second)
+		p.client.SetConnMaxIdleTime(time.Duration(p.pooling.MaxIdleTime) * time.Second)
+		p.client.SetMaxOpenConns(p.pooling.MaxOpenCons)
+		p.client.SetMaxIdleConns(p.pooling.MaxIdleCons)
+		p.client.SetDefaultDB(p.id)
+	}
+	return p, nil
 }
 
 func (p *SQLite) GetSources(database ...string) (tables []Source, err error) {
@@ -312,8 +309,9 @@ func (p *SQLite) GetForeignKeys(table string, database ...string) (fields []Fore
 	for _, fkMap := range fkMaps {
 		fk := ForeignKey{
 			Name:             fkMap["from"].(string),
+			Column:           []string{fkMap["from"].(string)},
 			ReferencedTable:  fkMap["table"].(string),
-			ReferencedColumn: fkMap["to"].(string),
+			ReferencedColumn: []string{fkMap["to"].(string)},
 		}
 		fields = append(fields, fk)
 	}
@@ -494,10 +492,101 @@ func getSQLiteFieldAlterDataType(table string, f Field) string {
 	return fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s %s %s;", table, f.Name, dataTypes[baseDataType], nullable, defaultVal)
 }
 
+// getExistingConstraints retrieves all existing constraint names for a table (limited for SQLite)
+func (p *SQLite) getExistingConstraints(table string) ([]string, error) {
+	var constraints []string
+
+	// Get index names from sqlite_master
+	var indexRows []map[string]any
+	err := p.client.Select(&indexRows, "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?", table)
+	if err != nil {
+		return []string{}, nil // Return empty list on error
+	}
+
+	for _, row := range indexRows {
+		if name, ok := row["name"].(string); ok {
+			constraints = append(constraints, name)
+		}
+	}
+
+	return constraints, nil
+}
+
+// recreateTableSQL generates SQL to recreate a table with new schema (SQLite-specific)
+// WARNING: This is a complex operation that:
+// 1. Creates a temporary table with new schema
+// 2. Copies data from old table to new table
+// 3. Drops the old table
+// 4. Renames the new table
+// This process can be risky and may result in data loss if not executed properly
+func (p *SQLite) recreateTableSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
+	var sql []string
+
+	// Generate temporary table name
+	tempTable := table + "_temp_" + fmt.Sprintf("%d", time.Now().Unix())
+
+	// Step 1: Create new table with updated schema
+	createSQL, err := p.createSQL(tempTable, newFields, constraints)
+	if err != nil {
+		return "", err
+	}
+	sql = append(sql, createSQL)
+
+	// Step 2: Copy data from old table to new table
+	// Get column names that exist in both tables
+	existingFields, err := p.GetFields(table)
+	if err != nil {
+		return "", err
+	}
+
+	var commonColumns []string
+	for _, newField := range newFields {
+		for _, existingField := range existingFields {
+			if strings.EqualFold(newField.Name, existingField.Name) {
+				commonColumns = append(commonColumns, "`"+newField.Name+"`")
+				break
+			}
+		}
+	}
+
+	if len(commonColumns) > 0 {
+		copySQL := fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`;",
+			tempTable, strings.Join(commonColumns, ", "), strings.Join(commonColumns, ", "), table)
+		sql = append(sql, copySQL)
+	}
+
+	// Step 3: Drop old table
+	dropSQL := fmt.Sprintf("DROP TABLE `%s`;", table)
+	sql = append(sql, dropSQL)
+
+	// Step 4: Rename new table to old name
+	renameSQL := fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`;", tempTable, table)
+	sql = append(sql, renameSQL)
+
+	return strings.Join(sql, ""), nil
+}
+
 func (p *SQLite) alterFieldSQL(table string, f, existingField Field) string {
-	// SQLite doesn't support modifying existing columns directly
-	// This would require a more complex table recreation process
-	return ""
+	// SQLite has very limited ALTER TABLE support:
+	// - Can ADD columns
+	// - Can RENAME columns (SQLite 3.25.0+)
+	// - Cannot MODIFY column types, nullability, or defaults
+	// - Cannot DROP columns (SQLite 3.35.0+ but with limitations)
+	//
+	// For most schema changes, SQLite requires table recreation:
+	// 1. Create temp table with new schema
+	// 2. Copy data from old table
+	// 3. Drop old table
+	// 4. Rename temp table
+
+	// Check if fields are functionally equivalent
+	if fieldsEqual(f, existingField) {
+		return "" // No change needed
+	}
+
+	// For SQLite, most field changes require table recreation
+	// We'll return a special marker to indicate this
+	return "__RECREATE_TABLE__"
 }
 
 func (p *SQLite) createSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
@@ -564,10 +653,10 @@ func (p *SQLite) createSQL(table string, newFields []Field, constraints *Constra
 		// Handle foreign key constraints
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
 			constraint := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+				fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
 			if fk.OnDelete != "" {
 				constraint += " ON DELETE " + strings.ToUpper(fk.OnDelete)
 			}
@@ -602,6 +691,36 @@ func (p *SQLite) alterSQL(table string, newFields []Field, constraints *Constrai
 		return "", err
 	}
 
+	// If no constraints are provided, don't generate any constraint-related SQL
+	if constraints == nil {
+		constraints = &Constraint{}
+	}
+
+	// Check if any field changes require table recreation
+	needsRecreation := false
+	for _, newField := range newFields {
+		if newField.IsNullable == "" {
+			newField.IsNullable = "YES"
+		}
+		for _, existingField := range existingFields {
+			if existingField.Name == newField.Name {
+				if p.alterFieldSQL(table, newField, existingField) == "__RECREATE_TABLE__" {
+					needsRecreation = true
+					break
+				}
+			}
+		}
+		if needsRecreation {
+			break
+		}
+	}
+
+	if needsRecreation {
+		// SQLite requires table recreation for most schema changes
+		return p.recreateTableSQL(table, newFields, constraints)
+	}
+
+	// Handle simple changes that SQLite supports
 	for _, newField := range newFields {
 		if newField.IsNullable == "" {
 			newField.IsNullable = "YES"
@@ -619,6 +738,55 @@ func (p *SQLite) alterSQL(table string, newFields []Field, constraints *Constrai
 			if qry != "" {
 				sql = append(sql, qry)
 			}
+		}
+	}
+
+	// Handle constraints (SQLite has limited support for ALTER TABLE constraints)
+	existingConstraints, err := p.getExistingConstraints(table)
+	if err != nil {
+		existingConstraints = []string{}
+	}
+
+	// Handle unique constraints - SQLite supports CREATE UNIQUE INDEX
+	for _, unique := range constraints.UniqueKeys {
+		if unique.Name == "" {
+			unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
+		}
+		// Check if constraint already exists
+		constraintExists := false
+		for _, existing := range existingConstraints {
+			if strings.EqualFold(existing, unique.Name) {
+				constraintExists = true
+				break
+			}
+		}
+		if !constraintExists {
+			q := fmt.Sprintf("CREATE UNIQUE INDEX %s ON `%s` (`%s`);", unique.Name, table, strings.Join(unique.Columns, "`, `"))
+			sql = append(sql, q)
+		}
+	}
+
+	// Handle regular indices
+	for _, index := range constraints.Indices {
+		if index.Name == "" {
+			index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+		}
+		// Check if index already exists
+		indexExists := false
+		for _, existing := range existingConstraints {
+			if strings.EqualFold(existing, index.Name) {
+				indexExists = true
+				break
+			}
+		}
+		if !indexExists {
+			var q string
+			if index.Unique {
+				q = fmt.Sprintf("CREATE UNIQUE INDEX %s ON `%s` (`%s`);", index.Name, table, strings.Join(index.Columns, "`, `"))
+			} else {
+				q = fmt.Sprintf("CREATE INDEX %s ON `%s` (`%s`);", index.Name, table, strings.Join(index.Columns, "`, `"))
+			}
+			sql = append(sql, q)
 		}
 	}
 

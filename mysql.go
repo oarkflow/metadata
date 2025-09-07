@@ -3,6 +3,7 @@ package metadata
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ var mysqlQueries = map[string]string{
 	"column":              "%s %s",
 	"add_column":          "ADD COLUMN %s %s",    // {{length}} NOT NULL DEFAULT 1
 	"change_column":       "MODIFY COLUMN %s %s", // {{length}} NOT NULL DEFAULT 1
-	"remove_column":       "MODIFY COLUMN % %s",  // {{length}} NOT NULL DEFAULT 1
+	"remove_column":       "MODIFY COLUMN %s %s", // {{length}} NOT NULL DEFAULT 1
 	"create_unique_index": "CREATE UNIQUE INDEX %s ON %s (%s);",
 	"create_index":        "CREATE INDEX %s ON %s (%s);",
 }
@@ -293,7 +294,7 @@ func (p *MySQL) GetForeignKeys(table string, database ...string) (fields []Forei
 	if len(database) > 0 {
 		db = database[0]
 	}
-	err = p.client.Select(&fields, "SELECT distinct cu.column_name as `name`, cu.referenced_table_name as `referenced_table`, cu.referenced_column_name as `referenced_column` FROM information_schema.key_column_usage cu INNER JOIN information_schema.referential_constraints rc ON rc.constraint_schema = cu.table_schema AND rc.table_name = cu.table_name AND rc.constraint_name = cu.constraint_name WHERE cu.table_name=:table_name AND TABLE_SCHEMA=:schema;", map[string]any{
+	err = p.client.Select(&fields, "SELECT distinct cu.constraint_name as `name`, cu.column_name as `column`, cu.referenced_table_name as `referenced_table`, cu.referenced_column_name as `referenced_column` FROM information_schema.key_column_usage cu INNER JOIN information_schema.referential_constraints rc ON rc.constraint_schema = cu.table_schema AND rc.table_name = cu.table_name AND rc.constraint_name = cu.constraint_name WHERE cu.table_name=:table_name AND TABLE_SCHEMA=:schema;", map[string]any{
 		"schema":     db,
 		"table_name": table,
 	})
@@ -522,7 +523,7 @@ func fieldsEqual(newField, existingField Field) bool {
 	if newField.Name != existingField.Name {
 		return false
 	}
-	if strings.ToUpper(newField.IsNullable) != strings.ToUpper(existingField.IsNullable) {
+	if !strings.EqualFold(newField.IsNullable, existingField.IsNullable) {
 		return false
 	}
 	// Compare keys (PRI, UNI, MUL) - but be more lenient
@@ -541,7 +542,7 @@ func fieldsEqual(newField, existingField Field) bool {
 	newBaseType, newLength, newPrecision := parseDataTypeWithParameters(newField.DataType)
 	existingBaseType, existingLength, existingPrecision := parseDataTypeWithParameters(existingField.DataType)
 
-	if strings.ToLower(newBaseType) != strings.ToLower(existingBaseType) {
+	if !strings.EqualFold(newBaseType, existingBaseType) {
 		return false
 	}
 
@@ -588,7 +589,7 @@ func fieldsEqual(newField, existingField Field) bool {
 	// If existing has no comment, ignore comment differences (don't trigger ALTER for adding comments)
 
 	// Compare extra properties (like AUTO_INCREMENT)
-	if strings.ToUpper(newField.Extra) != strings.ToUpper(existingField.Extra) {
+	if !strings.EqualFold(newField.Extra, existingField.Extra) {
 		return false
 	}
 
@@ -611,6 +612,17 @@ func normalizeDefault(def any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// getExistingConstraints retrieves all existing constraint names for a table
+func (p *MySQL) getExistingConstraints(table string) ([]string, error) {
+	var constraints []string
+	db := p.schema
+	err := p.client.Select(&constraints, `
+		SELECT CONSTRAINT_NAME
+		FROM information_schema.table_constraints
+		WHERE table_name = ? AND table_schema = ?`, table, db)
+	return constraints, err
 }
 
 func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
@@ -695,10 +707,10 @@ func (p *MySQL) createSQL(table string, newFields []Field, constraints *Constrai
 		// Handle foreign key constraints
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join([]string{fk.ReferencedColumn}, "_")
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
 			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+				table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
 			if fk.OnDelete != "" {
 				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
 			}
@@ -735,6 +747,11 @@ func (p *MySQL) alterSQL(table string, newFields []Field, constraints *Constrain
 	existingIndices, err := p.GetTheIndices(table)
 	if err != nil {
 		return "", err
+	}
+
+	// If no constraints are provided, don't generate any constraint-related SQL
+	if constraints == nil {
+		constraints = &Constraint{}
 	}
 
 	// Deterministic: sort fields by name
@@ -845,48 +862,106 @@ func (p *MySQL) alterSQL(table string, newFields []Field, constraints *Constrain
 			}
 		}
 
-		// Handle unique constraints
+		// Get existing foreign keys to check for duplicates
+		existingForeignKeys, err := p.GetForeignKeys(table)
+		if err != nil {
+			// If we can't get existing foreign keys, skip constraint checks
+			existingForeignKeys = []ForeignKey{}
+		}
+
+		// Get existing constraints to check for duplicates
+		existingConstraints, err := p.getExistingConstraints(table)
+		if err != nil {
+			// If we can't get existing constraints, skip constraint checks
+			existingConstraints = []string{}
+		}
+
+		// Handle unique constraints - check if they already exist
 		for _, unique := range constraints.UniqueKeys {
 			if unique.Name == "" {
 				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, unique.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle check constraints
+		// Handle check constraints - check if they already exist
 		for _, check := range constraints.CheckKeys {
 			if check.Name == "" {
 				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, check.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle primary key constraints
+		// Handle primary key constraints - check if they already exist
 		for _, pk := range constraints.PrimaryKeys {
 			if pk.Name == "" {
 				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, pk.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle foreign key constraints
+		// Handle foreign key constraints - check if they already exist
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
-			if fk.OnDelete != "" {
-				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+
+			// Check if foreign key already exists
+			fkExists := false
+			for _, existingFK := range existingForeignKeys {
+				if strings.EqualFold(existingFK.Name, fk.Name) ||
+					(strings.EqualFold(existingFK.ReferencedTable, fk.ReferencedTable) &&
+						reflect.DeepEqual(existingFK.ReferencedColumn, fk.ReferencedColumn)) {
+					fkExists = true
+					break
+				}
 			}
-			if fk.OnUpdate != "" {
-				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+
+			if !fkExists {
+				q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+					table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
+				if fk.OnDelete != "" {
+					q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+				}
+				if fk.OnUpdate != "" {
+					q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+				}
+				q += ";"
+				sql = append(sql, q)
 			}
-			q += ";"
-			sql = append(sql, q)
 		}
 	}
 

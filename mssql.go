@@ -340,7 +340,8 @@ func (p *MsSQL) GetForeignKeys(table string, database ...string) (fields []Forei
 	}
 	err = p.client.Select(&fields, `
 		SELECT
-			kcu.COLUMN_NAME as [name],
+			kcu.CONSTRAINT_NAME as [name],
+			kcu.COLUMN_NAME as [column],
 			kcu.REFERENCED_TABLE_NAME as [referenced_table],
 			kcu.REFERENCED_COLUMN_NAME as [referenced_column]
 		FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
@@ -521,6 +522,16 @@ func getMSSQLFieldAlterDataType(table string, f Field) string {
 	}
 }
 
+// getExistingConstraints retrieves all existing constraint names for a table
+func (p *MsSQL) getExistingConstraints(table string) ([]string, error) {
+	var constraints []string
+	err := p.client.Select(&constraints, `
+		SELECT name
+		FROM sys.objects
+		WHERE parent_object_id = OBJECT_ID(?) AND type IN ('C', 'F', 'PK', 'UQ')`, table)
+	return constraints, err
+}
+
 func (p *MsSQL) alterFieldSQL(table string, f, existingField Field) string {
 	// First check if fields are functionally equivalent
 	if fieldsEqual(f, existingField) {
@@ -591,10 +602,10 @@ func (p *MsSQL) createSQL(table string, newFields []Field, constraints *Constrai
 		// Handle foreign key constraints
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
 			q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES [%s] (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+				table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
 			if fk.OnDelete != "" {
 				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
 			}
@@ -630,6 +641,11 @@ func (p *MsSQL) alterSQL(table string, newFields []Field, constraints *Constrain
 	existingIndices, err := p.GetTheIndices(table)
 	if err != nil {
 		return "", err
+	}
+
+	// If no constraints are provided, don't generate any constraint-related SQL
+	if constraints == nil {
+		constraints = &Constraint{}
 	}
 
 	// Deterministic: sort fields by name
@@ -740,48 +756,97 @@ func (p *MsSQL) alterSQL(table string, newFields []Field, constraints *Constrain
 			}
 		}
 
-		// Handle unique constraints
+		// Get existing constraints to check for duplicates
+		existingConstraints, err := p.getExistingConstraints(table)
+		if err != nil {
+			// If we can't get existing constraints, skip constraint checks
+			existingConstraints = []string{}
+		}
+
+		// Handle unique constraints - check if they already exist
 		for _, unique := range constraints.UniqueKeys {
 			if unique.Name == "" {
 				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, unique.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle check constraints
+		// Handle check constraints - check if they already exist
 		for _, check := range constraints.CheckKeys {
 			if check.Name == "" {
 				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, check.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle primary key constraints
+		// Handle primary key constraints - check if they already exist
 		for _, pk := range constraints.PrimaryKeys {
 			if pk.Name == "" {
 				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
-			sql = append(sql, q)
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, pk.Name) {
+					constraintExists = true
+					break
+				}
+			}
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+				sql = append(sql, q)
+			}
 		}
 
-		// Handle foreign key constraints
+		// Handle foreign key constraints - check if they already exist
 		for _, fk := range constraints.ForeignKeys {
 			if fk.Name == "" {
-				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join(fk.ReferencedColumn, "_")
 			}
-			q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES [%s] (%s)",
-				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
-			if fk.OnDelete != "" {
-				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+
+			// Check if constraint already exists
+			constraintExists := false
+			for _, existingConstraint := range existingConstraints {
+				if strings.EqualFold(existingConstraint, fk.Name) {
+					constraintExists = true
+					break
+				}
 			}
-			if fk.OnUpdate != "" {
-				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+
+			if !constraintExists {
+				q := fmt.Sprintf("ALTER TABLE [%s] ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES [%s] (%s)",
+					table, fk.Name, strings.Join(fk.Column, ", "), fk.ReferencedTable, strings.Join(fk.ReferencedColumn, ", "))
+				if fk.OnDelete != "" {
+					q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+				}
+				if fk.OnUpdate != "" {
+					q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+				}
+				q += ";"
+				sql = append(sql, q)
 			}
-			q += ";"
-			sql = append(sql, q)
 		}
 	}
 
@@ -853,13 +918,14 @@ func (p *MsSQL) FieldAsString(f Field, action string) string {
 	}
 
 	// Handle PostgreSQL serial types specially - convert to IDENTITY
-	if actualDataType == "serial" || actualDataType == "serial4" {
+	switch actualDataType {
+	case "serial", "serial4":
 		mappedDataType = "INT"
 		autoIncrement = "IDENTITY(1,1)"
-	} else if actualDataType == "bigserial" || actualDataType == "serial8" {
+	case "bigserial", "serial8":
 		mappedDataType = "BIGINT"
 		autoIncrement = "IDENTITY(1,1)"
-	} else if actualDataType == "smallserial" || actualDataType == "serial2" {
+	case "smallserial", "serial2":
 		mappedDataType = "SMALLINT"
 		autoIncrement = "IDENTITY(1,1)"
 	}
