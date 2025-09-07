@@ -553,9 +553,9 @@ func (p *Postgres) alterFieldSQL(table string, f, existingField Field) string {
 	return getPostgresFieldAlterDataType(table, f)
 }
 
-func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *Postgres) createSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql string
-	var query, comments, indexQuery, primaryKeys []string
+	var query, comments, indexQuery, constraintQuery, primaryKeys []string
 
 	// Deterministic: sort fields by name
 	sort.SliceStable(newFields, func(i, j int) bool {
@@ -574,27 +574,74 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 		}
 	}
 
-	// Deterministic: ensure index names then sort indices by name
-	if len(indices) > 0 {
-		tmp := make([]Indices, 0, len(indices))
-		for _, idx := range indices {
-			cpy := idx
-			if cpy.Name == "" {
-				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+	// Handle constraints
+	if constraints != nil {
+		// Handle indices
+		if len(constraints.Indices) > 0 {
+			tmp := make([]Indices, 0, len(constraints.Indices))
+			for _, idx := range constraints.Indices {
+				cpy := idx
+				if cpy.Name == "" {
+					cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+				}
+				tmp = append(tmp, cpy)
 			}
-			tmp = append(tmp, cpy)
+			sort.SliceStable(tmp, func(i, j int) bool {
+				return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+			})
+			for _, index := range tmp {
+				if index.Unique {
+					q := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
+					indexQuery = append(indexQuery, q)
+				} else {
+					q := fmt.Sprintf(postgresQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
+					indexQuery = append(indexQuery, q)
+				}
+			}
 		}
-		sort.SliceStable(tmp, func(i, j int) bool {
-			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
-		})
-		for _, index := range tmp {
-			if index.Unique {
-				q := fmt.Sprintf(postgresQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, q)
-			} else {
-				q := fmt.Sprintf(postgresQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, q)
+
+		// Handle unique constraints
+		for _, unique := range constraints.UniqueKeys {
+			if unique.Name == "" {
+				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle check constraints
+		for _, check := range constraints.CheckKeys {
+			if check.Name == "" {
+				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle primary key constraints
+		for _, pk := range constraints.PrimaryKeys {
+			if pk.Name == "" {
+				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle foreign key constraints
+		for _, fk := range constraints.ForeignKeys {
+			if fk.Name == "" {
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+			if fk.OnDelete != "" {
+				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+			}
+			if fk.OnUpdate != "" {
+				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+			}
+			q += ";"
+			constraintQuery = append(constraintQuery, q)
 		}
 	}
 
@@ -614,7 +661,7 @@ func (p *Postgres) createSQL(table string, newFields []Field, indices ...Indices
 	return sql, nil
 }
 
-func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indices) (string, error) {
+func (p *Postgres) alterSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql []string
 	alterTable := "ALTER TABLE " + table
 	existingFields, err := p.GetFields(table)
@@ -697,40 +744,87 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 		existingIndicesMap[existingIndex.Name] = existingIndex
 	}
 
-	// Deterministic: ensure new index names and sort by name
-	if len(newIndices) > 0 {
-		tmp := make([]Indices, 0, len(newIndices))
-		for _, idx := range newIndices {
-			cpy := idx
-			if cpy.Name == "" {
-				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+	// Handle constraints
+	if constraints != nil {
+		// Handle indices
+		if len(constraints.Indices) > 0 {
+			tmp := make([]Indices, 0, len(constraints.Indices))
+			for _, idx := range constraints.Indices {
+				cpy := idx
+				if cpy.Name == "" {
+					cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+				}
+				tmp = append(tmp, cpy)
 			}
-			tmp = append(tmp, cpy)
-		}
-		sort.SliceStable(tmp, func(i, j int) bool {
-			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
-		})
-		for _, newIndex := range tmp {
-			existingIndex, indexExists := existingIndicesMap[newIndex.Name]
-			if indexExists {
-				// if columns differ, drop and recreate
-				if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) || existingIndex.Unique != newIndex.Unique {
-					sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+			sort.SliceStable(tmp, func(i, j int) bool {
+				return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+			})
+			for _, newIndex := range tmp {
+				existingIndex, indexExists := existingIndicesMap[newIndex.Name]
+				if indexExists {
+					// if columns differ, drop and recreate
+					if !reflect.DeepEqual(existingIndex.Columns, newIndex.Columns) || existingIndex.Unique != newIndex.Unique {
+						sql = append(sql, fmt.Sprintf("DROP INDEX %s;", existingIndex.Name))
+						if newIndex.Unique {
+							sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+						} else {
+							sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
+						}
+					}
+					delete(existingIndicesMap, newIndex.Name)
+				} else {
+					// New index
 					if newIndex.Unique {
 						sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
 					} else {
 						sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
 					}
 				}
-				delete(existingIndicesMap, newIndex.Name)
-			} else {
-				// New index
-				if newIndex.Unique {
-					sql = append(sql, fmt.Sprintf(postgresQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
-				} else {
-					sql = append(sql, fmt.Sprintf(postgresQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", ")))
-				}
 			}
+		}
+
+		// Handle unique constraints
+		for _, unique := range constraints.UniqueKeys {
+			if unique.Name == "" {
+				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+			sql = append(sql, q)
+		}
+
+		// Handle check constraints
+		for _, check := range constraints.CheckKeys {
+			if check.Name == "" {
+				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+			sql = append(sql, q)
+		}
+
+		// Handle primary key constraints
+		for _, pk := range constraints.PrimaryKeys {
+			if pk.Name == "" {
+				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+			sql = append(sql, q)
+		}
+
+		// Handle foreign key constraints
+		for _, fk := range constraints.ForeignKeys {
+			if fk.Name == "" {
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+			if fk.OnDelete != "" {
+				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+			}
+			if fk.OnUpdate != "" {
+				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+			}
+			q += ";"
+			sql = append(sql, q)
 		}
 	}
 
@@ -752,7 +846,7 @@ func (p *Postgres) alterSQL(table string, newFields []Field, newIndices ...Indic
 	return "", nil
 }
 
-func (p *Postgres) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *Postgres) GenerateSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	sources, err := p.GetSources()
 	if err != nil {
 		return "", err
@@ -765,9 +859,9 @@ func (p *Postgres) GenerateSQL(table string, newFields []Field, indices ...Indic
 		}
 	}
 	if !sourceExists {
-		return p.createSQL(table, newFields, indices...)
+		return p.createSQL(table, newFields, constraints)
 	}
-	return p.alterSQL(table, newFields, indices...)
+	return p.alterSQL(table, newFields, constraints)
 }
 
 func (p *Postgres) Migrate(table string, dst DataSource) error {
@@ -775,7 +869,7 @@ func (p *Postgres) Migrate(table string, dst DataSource) error {
 	if err != nil {
 		return err
 	}
-	_, err = dst.GenerateSQL(table, fields)
+	_, err = dst.GenerateSQL(table, fields, nil)
 	if err != nil {
 		return err
 	}

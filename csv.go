@@ -70,7 +70,7 @@ func (ds *CSVDataSource) Exec(sql string, values ...any) error {
 	return errors.New("Exec not supported for CSV datasource")
 }
 
-func (ds *CSVDataSource) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (ds *CSVDataSource) GenerateSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	return "", errors.New("GenerateSQL not supported for CSV datasource")
 }
 

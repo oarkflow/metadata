@@ -68,7 +68,7 @@ func SQLiteExample() {
 	}
 
 	// Test SQL generation
-	sql, err := source.GenerateSQL("test_table", testFields)
+	sql, err := source.GenerateSQL("test_table", testFields, nil)
 	if err == nil {
 		fmt.Printf("Generated SQLite SQL:\n%s\n", sql)
 	} else {
@@ -141,8 +141,8 @@ func EnhancedMigrationExample() {
 	pgFields := convertFieldsForPostgreSQL(mysqlFields)
 
 	// Generate SQLs
-	mysqlSQL, _ := mysqlSource.GenerateSQL("products", mysqlFields)
-	pgSQL, _ := pgSource.GenerateSQL("products", pgFields)
+	mysqlSQL, _ := mysqlSource.GenerateSQL("products", mysqlFields, nil)
+	pgSQL, _ := pgSource.GenerateSQL("products", pgFields, nil)
 
 	fmt.Printf("MySQL Source SQL:\n%s\n", mysqlSQL)
 	fmt.Printf("PostgreSQL Target SQL:\n%s\n", pgSQL)

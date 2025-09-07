@@ -623,9 +623,9 @@ func (p *MySQL) alterFieldSQL(table string, f, existingField Field) string {
 	return getMySQLFieldAlterDataType(table, f)
 }
 
-func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *MySQL) createSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql string
-	var query, indexQuery, primaryKeys []string
+	var query, constraintQuery, primaryKeys []string
 
 	// Deterministic: sort fields by name
 	sort.SliceStable(newFields, func(i, j int) bool {
@@ -639,27 +639,74 @@ func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (
 		query = append(query, p.FieldAsString(newField, "column"))
 	}
 
-	// Deterministic: ensure index names then sort indices by name
-	if len(indices) > 0 {
-		tmp := make([]Indices, 0, len(indices))
-		for _, idx := range indices {
-			cpy := idx
-			if cpy.Name == "" {
-				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+	// Handle constraints
+	if constraints != nil {
+		// Handle indices
+		if len(constraints.Indices) > 0 {
+			tmp := make([]Indices, 0, len(constraints.Indices))
+			for _, idx := range constraints.Indices {
+				cpy := idx
+				if cpy.Name == "" {
+					cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+				}
+				tmp = append(tmp, cpy)
 			}
-			tmp = append(tmp, cpy)
+			sort.SliceStable(tmp, func(i, j int) bool {
+				return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+			})
+			for _, index := range tmp {
+				if index.Unique {
+					q := fmt.Sprintf(mysqlQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
+					constraintQuery = append(constraintQuery, q)
+				} else {
+					q := fmt.Sprintf(mysqlQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
+					constraintQuery = append(constraintQuery, q)
+				}
+			}
 		}
-		sort.SliceStable(tmp, func(i, j int) bool {
-			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
-		})
-		for _, index := range tmp {
-			if index.Unique {
-				q := fmt.Sprintf(mysqlQueries["create_unique_index"], index.Name, table, strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, q)
-			} else {
-				q := fmt.Sprintf(mysqlQueries["create_index"], index.Name, table, strings.Join(index.Columns, ", "))
-				indexQuery = append(indexQuery, q)
+
+		// Handle unique constraints
+		for _, unique := range constraints.UniqueKeys {
+			if unique.Name == "" {
+				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle check constraints
+		for _, check := range constraints.CheckKeys {
+			if check.Name == "" {
+				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle primary key constraints
+		for _, pk := range constraints.PrimaryKeys {
+			if pk.Name == "" {
+				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+			constraintQuery = append(constraintQuery, q)
+		}
+
+		// Handle foreign key constraints
+		for _, fk := range constraints.ForeignKeys {
+			if fk.Name == "" {
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + strings.Join([]string{fk.ReferencedColumn}, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+			if fk.OnDelete != "" {
+				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+			}
+			if fk.OnUpdate != "" {
+				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+			}
+			q += ";"
+			constraintQuery = append(constraintQuery, q)
 		}
 	}
 
@@ -670,13 +717,13 @@ func (p *MySQL) createSQL(table string, newFields []Field, indices ...Indices) (
 		fieldsToUpdate := strings.Join(query, ", ")
 		sql = fmt.Sprintf(mysqlQueries["create_table"], table) + " (" + fieldsToUpdate + ");"
 	}
-	if len(indexQuery) > 0 {
-		sql += strings.Join(indexQuery, "")
+	if len(constraintQuery) > 0 {
+		sql += strings.Join(constraintQuery, "")
 	}
 	return sql, nil
 }
 
-func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *MySQL) alterSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql []string
 	alterTable := "ALTER TABLE " + table
 	existingFields, err := p.GetFields(table)
@@ -749,50 +796,97 @@ func (p *MySQL) alterSQL(table string, newFields []Field, indices ...Indices) (s
 		}
 	}
 
-	// Third pass: handle indices - only create indices that don't already exist
-	if len(indices) > 0 {
-		// Deterministic: ensure index names then sort indices by name
-		tmp := make([]Indices, 0, len(indices))
-		for _, idx := range indices {
-			cpy := idx
-			if cpy.Name == "" {
-				cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+	// Third pass: handle constraints - only create constraints that don't already exist
+	if constraints != nil {
+		// Handle indices
+		if len(constraints.Indices) > 0 {
+			// Deterministic: ensure index names then sort indices by name
+			tmp := make([]Indices, 0, len(constraints.Indices))
+			for _, idx := range constraints.Indices {
+				cpy := idx
+				if cpy.Name == "" {
+					cpy.Name = "idx_" + table + "_" + strings.Join(cpy.Columns, "_")
+				}
+				tmp = append(tmp, cpy)
 			}
-			tmp = append(tmp, cpy)
-		}
-		sort.SliceStable(tmp, func(i, j int) bool {
-			return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
-		})
+			sort.SliceStable(tmp, func(i, j int) bool {
+				return strings.ToLower(tmp[i].Name) < strings.ToLower(tmp[j].Name)
+			})
 
-		for _, newIndex := range tmp {
-			indexExists := false
+			for _, newIndex := range tmp {
+				indexExists := false
 
-			// Check if index already exists (by name or by columns)
-			for _, existingIndex := range existingIndices {
-				// First check by name
-				if strings.EqualFold(existingIndex.Name, newIndex.Name) {
+				// Check if index already exists (by name or by columns)
+				for _, existingIndex := range existingIndices {
+					// First check by name
+					if strings.EqualFold(existingIndex.Name, newIndex.Name) {
+						if indicesEqual(existingIndex, newIndex) {
+							indexExists = true
+							break
+						}
+					}
+					// Also check by columns (for unnamed indices that might match)
 					if indicesEqual(existingIndex, newIndex) {
 						indexExists = true
 						break
 					}
 				}
-				// Also check by columns (for unnamed indices that might match)
-				if indicesEqual(existingIndex, newIndex) {
-					indexExists = true
-					break
-				}
-			}
 
-			// Only create index if it doesn't exist
-			if !indexExists {
-				var indexSQL string
-				if newIndex.Unique {
-					indexSQL = fmt.Sprintf(mysqlQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
-				} else {
-					indexSQL = fmt.Sprintf(mysqlQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
+				// Only create index if it doesn't exist
+				if !indexExists {
+					var indexSQL string
+					if newIndex.Unique {
+						indexSQL = fmt.Sprintf(mysqlQueries["create_unique_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
+					} else {
+						indexSQL = fmt.Sprintf(mysqlQueries["create_index"], newIndex.Name, table, strings.Join(newIndex.Columns, ", "))
+					}
+					sql = append(sql, indexSQL)
 				}
-				sql = append(sql, indexSQL)
 			}
+		}
+
+		// Handle unique constraints
+		for _, unique := range constraints.UniqueKeys {
+			if unique.Name == "" {
+				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, unique.Name, strings.Join(unique.Columns, ", "))
+			sql = append(sql, q)
+		}
+
+		// Handle check constraints
+		for _, check := range constraints.CheckKeys {
+			if check.Name == "" {
+				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s);", table, check.Name, check.Expression)
+			sql = append(sql, q)
+		}
+
+		// Handle primary key constraints
+		for _, pk := range constraints.PrimaryKeys {
+			if pk.Name == "" {
+				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s PRIMARY KEY (%s);", table, pk.Name, strings.Join(pk.Columns, ", "))
+			sql = append(sql, q)
+		}
+
+		// Handle foreign key constraints
+		for _, fk := range constraints.ForeignKeys {
+			if fk.Name == "" {
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+			}
+			q := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				table, fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+			if fk.OnDelete != "" {
+				q += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+			}
+			if fk.OnUpdate != "" {
+				q += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+			}
+			q += ";"
+			sql = append(sql, q)
 		}
 	}
 
@@ -823,7 +917,7 @@ func indicesEqual(existing, new Indices) bool {
 	return true
 }
 
-func (p *MySQL) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *MySQL) GenerateSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	sources, err := p.GetSources()
 	if err != nil {
 		return "", err
@@ -836,9 +930,9 @@ func (p *MySQL) GenerateSQL(table string, newFields []Field, indices ...Indices)
 		}
 	}
 	if !sourceExists {
-		return p.createSQL(table, newFields, indices...)
+		return p.createSQL(table, newFields, constraints)
 	}
-	return p.alterSQL(table, newFields, indices...)
+	return p.alterSQL(table, newFields, constraints)
 }
 
 func (p *MySQL) Migrate(table string, dst DataSource) error {
@@ -846,7 +940,7 @@ func (p *MySQL) Migrate(table string, dst DataSource) error {
 	if err != nil {
 		return err
 	}
-	sql, err := dst.GenerateSQL(table, fields)
+	sql, err := dst.GenerateSQL(table, fields, nil)
 	if err != nil {
 		return err
 	}

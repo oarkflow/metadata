@@ -89,6 +89,7 @@ func main() {
 	SQLiteExample()
 	EnhancedMigrationExample()
 	DataTypeAnalysisExample()
+	RunConstraintExamples()
 }
 
 func conn() (src, dst metadata.DataSource) {

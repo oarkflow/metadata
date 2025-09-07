@@ -87,7 +87,7 @@ func testMySQL() {
 	}
 
 	// Test SQL generation
-	sql, err := source.GenerateSQL("test_table", testFields)
+	sql, err := source.GenerateSQL("test_table", testFields, nil)
 	if err == nil {
 		fmt.Printf("Generated MySQL SQL:\n%s\n", sql)
 	} else {
@@ -154,7 +154,7 @@ func testPostgreSQL() {
 	}
 
 	// Test SQL generation
-	sql, err := source.GenerateSQL("test_table", testFields)
+	sql, err := source.GenerateSQL("test_table", testFields, nil)
 	if err == nil {
 		fmt.Printf("Generated PostgreSQL SQL:\n%s\n", sql)
 	} else {
@@ -222,7 +222,7 @@ func testMSSQL() {
 	}
 
 	// Test SQL generation
-	sql, err := source.GenerateSQL("test_table", testFields)
+	sql, err := source.GenerateSQL("test_table", testFields, nil)
 	if err == nil {
 		fmt.Printf("Generated MSSQL SQL:\n%s\n", sql)
 	} else {

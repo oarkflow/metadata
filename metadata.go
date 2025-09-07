@@ -78,6 +78,31 @@ type ForeignKey struct {
 	Name             string `json:"name" gorm:"column:name"`
 	ReferencedTable  string `json:"referenced_table" gorm:"column:referenced_table"`
 	ReferencedColumn string `json:"referenced_column" gorm:"column:referenced_column"`
+	OnDelete         string `json:"on_delete" gorm:"column:on_delete"`
+	OnUpdate         string `json:"on_update" gorm:"column:on_update"`
+}
+
+type UniqueConstraint struct {
+	Name    string   `json:"name" gorm:"column:name"`
+	Columns []string `json:"columns" gorm:"type:text column:columns"`
+}
+
+type CheckConstraint struct {
+	Name       string `json:"name" gorm:"column:name"`
+	Expression string `json:"expression" gorm:"column:expression"`
+}
+
+type PrimaryKeyConstraint struct {
+	Name    string   `json:"name" gorm:"column:name"`
+	Columns []string `json:"columns" gorm:"type:text column:columns"`
+}
+
+type Constraint struct {
+	Indices     []Indices              `json:"indices"`
+	ForeignKeys []ForeignKey           `json:"foreign"`
+	UniqueKeys  []UniqueConstraint     `json:"unique"`
+	CheckKeys   []CheckConstraint      `json:"check"`
+	PrimaryKeys []PrimaryKeyConstraint `json:"primary"`
 }
 
 type Index struct {
@@ -151,10 +176,10 @@ func AsJsonSchema(fields []Field, additionalProperties bool, source ...string) *
 			}
 
 		}
-		
+
 		// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 		baseDataType, _, _ := parseDataTypeWithParameters(field.DataType)
-		
+
 		switch strings.ToUpper(baseDataType) {
 		case "BOOL", "BOOLEAN":
 			prop.Type = "boolean"
@@ -196,7 +221,7 @@ type DataSource interface {
 	GetTheIndices(table string, database ...string) (fields []Indices, err error)
 	Begin() (squealx.SQLTx, error)
 	Exec(sql string, values ...any) error
-	GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error)
+	GenerateSQL(table string, newFields []Field, constraints *Constraint) (string, error)
 	LastInsertedID() (id any, err error)
 	MaxID(table, field string) (id any, err error)
 	Client() any
@@ -414,7 +439,7 @@ func CloneTable(srcCon, destCon DataSource, src, dest string) error {
 	if dest == "" {
 		dest = src
 	}
-	sq, err := destCon.GenerateSQL(dest, fields)
+	sq, err := destCon.GenerateSQL(dest, fields, nil)
 	if err != nil {
 		return errors.NewE(err, fmt.Sprintf("Unable to get generate SQL for %s", dest), "CloneTable")
 	}

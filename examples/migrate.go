@@ -95,7 +95,7 @@ type Model struct {
 	Update          bool             `json:"update"`
 }
 
-func main() {
+func RunMigrateExample() {
 	var model Model
 	err := json.Unmarshal(data, &model)
 	if err != nil {
@@ -145,7 +145,10 @@ func main() {
 		}
 	}
 
-	sql, err := connector.GenerateSQL(model.Name, model.Fields, model.Constraints.Indices...)
+	constraints := &metadata.Constraint{
+		Indices: model.Constraints.Indices,
+	}
+	sql, err := connector.GenerateSQL(model.Name, model.Fields, constraints)
 	if err != nil {
 		panic(err)
 	}

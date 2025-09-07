@@ -216,7 +216,7 @@ func (p *SQLite) Config() Config {
 func (p *SQLite) GetDataTypeMap(dataType string) string {
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, _, _ := parseDataTypeWithParameters(dataType)
-	
+
 	if v, ok := sqliteDataTypes[baseDataType]; ok {
 		return v
 	}
@@ -461,10 +461,10 @@ func (p *SQLite) GetType() string {
 func getSQLiteFieldAlterDataType(table string, f Field) string {
 	// SQLite has limited ALTER TABLE support, most changes require recreating the table
 	dataTypes := sqliteDataTypes
-	
+
 	// Parse data type to handle cases like varchar(255), numeric(10,2), etc.
 	baseDataType, parsedLength, parsedPrecision := parseDataTypeWithParameters(f.DataType)
-	
+
 	// Use parsed length and precision if field doesn't have them set
 	if f.Length == 0 && parsedLength > 0 {
 		f.Length = parsedLength
@@ -472,7 +472,7 @@ func getSQLiteFieldAlterDataType(table string, f Field) string {
 	if f.Precision == 0 && parsedPrecision > 0 {
 		f.Precision = parsedPrecision
 	}
-	
+
 	defaultVal := ""
 	if f.Default != nil {
 		switch def := f.Default.(type) {
@@ -500,7 +500,7 @@ func (p *SQLite) alterFieldSQL(table string, f, existingField Field) string {
 	return ""
 }
 
-func (p *SQLite) createSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *SQLite) createSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql string
 	var query, indexQuery, primaryKeys []string
 	for _, newField := range newFields {
@@ -509,21 +509,77 @@ func (p *SQLite) createSQL(table string, newFields []Field, indices ...Indices) 
 		}
 		query = append(query, p.FieldAsString(newField, "column"))
 	}
-	if len(indices) > 0 {
-		for _, index := range indices {
-			if index.Name == "" {
-				index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+	// Handle constraints
+	if constraints != nil {
+		// Handle indices
+		if len(constraints.Indices) > 0 {
+			for _, index := range constraints.Indices {
+				if index.Name == "" {
+					index.Name = "idx_" + table + "_" + strings.Join(index.Columns, "_")
+				}
+				switch index.Unique {
+				case true:
+					query := fmt.Sprintf(sqliteQueries["create_unique_index"], index.Name, "`"+table+"`",
+						"`"+strings.Join(index.Columns, "`, `")+"`")
+					indexQuery = append(indexQuery, query)
+				case false:
+					query := fmt.Sprintf(sqliteQueries["create_index"], index.Name, "`"+table+"`",
+						"`"+strings.Join(index.Columns, "`, `")+"`")
+					indexQuery = append(indexQuery, query)
+				}
 			}
-			switch index.Unique {
-			case true:
-				query := fmt.Sprintf(sqliteQueries["create_unique_index"], index.Name, "`"+table+"`",
-					"`"+strings.Join(index.Columns, "`, `")+"`")
-				indexQuery = append(indexQuery, query)
-			case false:
-				query := fmt.Sprintf(sqliteQueries["create_index"], index.Name, "`"+table+"`",
-					"`"+strings.Join(index.Columns, "`, `")+"`")
-				indexQuery = append(indexQuery, query)
+		}
+
+		// SQLite has limited support for constraints, but we can add some as table constraints
+		// Note: SQLite doesn't support ALTER TABLE ADD CONSTRAINT, so these are only for CREATE TABLE
+		var tableConstraints []string
+
+		// Handle unique constraints
+		for _, unique := range constraints.UniqueKeys {
+			if unique.Name == "" {
+				unique.Name = "uk_" + table + "_" + strings.Join(unique.Columns, "_")
 			}
+			constraint := fmt.Sprintf("CONSTRAINT %s UNIQUE (%s)", unique.Name, strings.Join(unique.Columns, ", "))
+			tableConstraints = append(tableConstraints, constraint)
+		}
+
+		// Handle check constraints
+		for _, check := range constraints.CheckKeys {
+			if check.Name == "" {
+				check.Name = "ck_" + table + "_" + strings.ReplaceAll(check.Expression, " ", "_")
+			}
+			constraint := fmt.Sprintf("CONSTRAINT %s CHECK (%s)", check.Name, check.Expression)
+			tableConstraints = append(tableConstraints, constraint)
+		}
+
+		// Handle primary key constraints
+		for _, pk := range constraints.PrimaryKeys {
+			if pk.Name == "" {
+				pk.Name = "pk_" + table + "_" + strings.Join(pk.Columns, "_")
+			}
+			constraint := fmt.Sprintf("CONSTRAINT %s PRIMARY KEY (%s)", pk.Name, strings.Join(pk.Columns, ", "))
+			tableConstraints = append(tableConstraints, constraint)
+		}
+
+		// Handle foreign key constraints
+		for _, fk := range constraints.ForeignKeys {
+			if fk.Name == "" {
+				fk.Name = "fk_" + table + "_" + fk.ReferencedTable + "_" + fk.ReferencedColumn
+			}
+			constraint := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+				fk.Name, fk.Name, fk.ReferencedTable, fk.ReferencedColumn)
+			if fk.OnDelete != "" {
+				constraint += " ON DELETE " + strings.ToUpper(fk.OnDelete)
+			}
+			if fk.OnUpdate != "" {
+				constraint += " ON UPDATE " + strings.ToUpper(fk.OnUpdate)
+			}
+			tableConstraints = append(tableConstraints, constraint)
+		}
+
+		// Add table constraints to the query
+		if len(tableConstraints) > 0 {
+			query = append(query, strings.Join(tableConstraints, ", "))
 		}
 	}
 	if len(primaryKeys) > 0 {
@@ -539,7 +595,7 @@ func (p *SQLite) createSQL(table string, newFields []Field, indices ...Indices) 
 	return sql, nil
 }
 
-func (p *SQLite) alterSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *SQLite) alterSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	var sql []string
 	existingFields, err := p.GetFields(table)
 	if err != nil {
@@ -572,7 +628,7 @@ func (p *SQLite) alterSQL(table string, newFields []Field, indices ...Indices) (
 	return "", nil
 }
 
-func (p *SQLite) GenerateSQL(table string, newFields []Field, indices ...Indices) (string, error) {
+func (p *SQLite) GenerateSQL(table string, newFields []Field, constraints *Constraint) (string, error) {
 	sources, err := p.GetSources()
 	if err != nil {
 		return "", err
@@ -585,9 +641,9 @@ func (p *SQLite) GenerateSQL(table string, newFields []Field, indices ...Indices
 		}
 	}
 	if !sourceExists {
-		return p.createSQL(table, newFields, indices...)
+		return p.createSQL(table, newFields, constraints)
 	}
-	return p.alterSQL(table, newFields, indices...)
+	return p.alterSQL(table, newFields, constraints)
 }
 
 func (p *SQLite) Migrate(table string, dst DataSource) error {
@@ -595,7 +651,7 @@ func (p *SQLite) Migrate(table string, dst DataSource) error {
 	if err != nil {
 		return err
 	}
-	sql, err := dst.GenerateSQL(table, fields)
+	sql, err := dst.GenerateSQL(table, fields, nil)
 	if err != nil {
 		return err
 	}
@@ -665,20 +721,8 @@ func (p *SQLite) FieldAsString(f Field, action string) string {
 	}
 
 	// SQLite doesn't use length specifiers for most types
-	switch actualDataType {
-	case "string", "varchar", "text", "char":
-		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
-	case "int", "integer", "big_integer", "bigInteger", "tinyint":
-		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
-	case "float", "double", "decimal":
-		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
-	default:
-		changeColumn := sqlPattern[action] + " %s %s %s %s %s"
-		return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
-	}
+	changeColumn := sqlPattern[action] + " %s %s %s %s"
+	return strings.TrimSpace(space.ReplaceAllString(fmt.Sprintf(changeColumn, f.Name, mappedDataType, nullable, primaryKey, autoIncrement, defaultVal), " "))
 }
 
 func NewSQLite(id, dsn, database string, disableLog bool, pooling ConnectionPooling) *SQLite {
