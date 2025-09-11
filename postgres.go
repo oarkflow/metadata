@@ -316,6 +316,17 @@ WHERE table_catalog = :catalog AND table_schema = 'public' AND c.table_name =  :
 		return
 	}
 	err = json.Unmarshal(bt, &fields)
+	if err != nil {
+		return
+	}
+	// Normalize default values for existing fields
+	for i := range fields {
+		if def, ok := fields[i].Default.(string); ok {
+			if len(def) > 2 && def[0] == '\'' && def[len(def)-1] == '\'' {
+				fields[i].Default = def[1 : len(def)-1]
+			}
+		}
+	}
 	return
 }
 
