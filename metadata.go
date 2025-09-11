@@ -8,11 +8,11 @@ import (
 
 	"github.com/oarkflow/errors"
 	"github.com/oarkflow/json"
-	"github.com/oarkflow/protocol/utils/xid"
 	"github.com/oarkflow/squealx"
 	"github.com/oarkflow/squealx/datatypes"
 	"github.com/oarkflow/squealx/dbresolver"
 	"github.com/oarkflow/squealx/orm"
+	"github.com/oarkflow/xid/wuid"
 )
 
 var builtInFunctions = []string{
@@ -278,7 +278,7 @@ func New(config Config) DataSource {
 		MaxIdleCons: 50,
 	}
 	if config.Name == "" {
-		config.Name = xid.New().String()
+		config.Name = wuid.New().String()
 	}
 	if config.MaxLifetime > 0 {
 		connectionPooling.MaxLifetime = config.MaxLifetime
