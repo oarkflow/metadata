@@ -9,7 +9,7 @@ require (
 	github.com/oarkflow/errors v0.0.6
 	github.com/oarkflow/json v0.0.28
 	github.com/oarkflow/protocol v0.0.16
-	github.com/oarkflow/squealx v0.0.55
+	github.com/oarkflow/squealx v0.0.56
 )
 
 require github.com/goccy/go-reflect v1.2.0 // indirect

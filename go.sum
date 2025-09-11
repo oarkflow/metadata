@@ -73,8 +73,8 @@ github.com/oarkflow/protocol v0.0.16 h1:3qNn9gwoJOpdz+owyAmW4fNMpQplqHVIjzsWM4r0
 github.com/oarkflow/protocol v0.0.16/go.mod h1:iKP/I+3/FIWlZ6OphAo8c60JO2qgwethOMR+NMsMI28=
 github.com/oarkflow/render v0.0.1 h1:Caw74Yu8OE/tjCjurhbUkS0Fi9zE/mzVvQa1Cw7m7R4=
 github.com/oarkflow/render v0.0.1/go.mod h1:nnRhxhKn9NCPtTfbsaLuyCt86Iv9hMbNPDFQoPucQYI=
-github.com/oarkflow/squealx v0.0.55 h1:TBRweYEhNyZ72/fJqv3Z+o8ShZ+Oad+Rd58oNDKrahc=
-github.com/oarkflow/squealx v0.0.55/go.mod h1:J5PNHmu3fH+IgrNm8tltz0aX4drT5uZ5j3r9dW5jQ/8=
+github.com/oarkflow/squealx v0.0.56 h1:8rPx3jWNnt4ez2P10m1Lz4HTAbvrs0MZ7jjKDJ87Vqg=
+github.com/oarkflow/squealx v0.0.56/go.mod h1:J5PNHmu3fH+IgrNm8tltz0aX4drT5uZ5j3r9dW5jQ/8=
 github.com/oarkflow/xid v1.2.8 h1:uCIX61Binq2RPMsqImZM6pPGzoZTmRyD6jguxF9aAA0=
 github.com/oarkflow/xid v1.2.8/go.mod h1:jG4YBh+swbjlWApGWDBYnsJEa7hi3CCpmuqhB3RAxVo=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
